@@ -1,0 +1,13 @@
+# Python 虚拟环境（安装者本地初始化，不随仓库分发）
+.venv/
+
+# 图表运行时产物（每次调研生成）
+charts/*
+!charts/specs-demo.json
+
+# 脚本自测输出
+scripts/charts/self-test-output/
+
+# Python 缓存
+__pycache__/
+*.pyc
