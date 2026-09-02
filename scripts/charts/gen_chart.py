@@ -116,9 +116,13 @@ def _style_ax(ax, title, subtitle, source, notes):
     if notes:
         ax.text(0.0, -0.16, "；".join(notes), transform=ax.transAxes,
                 fontsize=8, color="#999999")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", alpha=0.3, linestyle="--")
+    if ax.name == "polar":
+        ax.grid(alpha=0.3, linestyle="--")
+    else:
+        for spine in ("top", "right"):
+            if spine in ax.spines:
+                ax.spines[spine].set_visible(False)
+        ax.grid(axis="y", alpha=0.3, linestyle="--")
     ax.set_axisbelow(True)
 
 
@@ -291,6 +295,8 @@ def draw_radar(spec, out_path):
                         for s in series] + [1]) * 1.2)
     ax.legend(loc="upper right", bbox_to_anchor=(1.25, 1.05), fontsize=9,
               frameon=False)
+    _style_ax(ax, spec["title"], spec.get("subtitle"), spec.get("source"),
+              spec.get("notes"))
     fig.tight_layout()
     _place_subtitle(ax)
     _warn_layout(ax, spec)
@@ -393,6 +399,9 @@ def _validate_spec(spec):
         return
     if t not in _DRAWERS:
         raise ValueError(f"不支持的图型 '{t}'，可选：{', '.join(_DRAWERS)} + mermaid（透传）")
+    for field in ("card_id", "source_id", "year", "unit", "definition", "base_period", "source", "position"):
+        if spec.get(field) in (None, ""):
+            raise ValueError(f"图表 '{spec.get('title', '')}' 缺少证据字段 {field}")
     if not spec.get("title"):
         raise ValueError("图表缺少 title")
     if not spec.get("filename"):
@@ -556,6 +565,15 @@ def self_test(outdir):
                                  {"name": "行业平均", "values": [1600, 5200]}]}},
         ]
     }
+    for item in spec["specs"]:
+        if item.get("type") != "mermaid":
+            item.setdefault("card_id", "SELF-TEST")
+            item.setdefault("source_id", "SELF-TEST")
+            item.setdefault("year", 2026)
+            item.setdefault("unit", "演示单位")
+            item.setdefault("definition", "演示数据，仅用于验证绘图链路")
+            item.setdefault("base_period", "演示区间")
+            item.setdefault("position", "附录：演示")
     return generate(spec["specs"], outdir, dpi=150)
 
 

@@ -49,7 +49,13 @@ visualizer 输出一个 `charts/specs.json`，`specs` 数组按报告出现顺�
       "title": "市场规模与增速趋势（2022-2027E）",
       "subtitle": "单位：亿元",          // 单位、口径补充
       "filename": "chart-01-market-size.png",     // 内部文件名（脚本中间态）
-      "display_name": "图1 市场规模与增速趋势.png",  // 交付语义文件名（gen_chart 自动生成同名副本，报告中绝对路径引用此副本）
+      "display_name": "图1 市场规模与增速趋势.png",  // 交付语义文件名
+      "card_id": "K03",                 // 必须绑定知识卡片
+      "source_id": "SRC-003",           // 必须绑定证据台账
+      "year": 2026,
+      "unit": "亿元",
+      "definition": "明确指标定义和统计口径",
+      "base_period": "2022-2025",
       "source": "艾瑞咨询 2026；估值",
       "notes": ["2026-2027E 为预测值"],  // 口径说明（可选）
       "figsize": [10, 6],                // 可选：覆盖默认画布尺寸 [宽, 高] 英寸（视觉检查重绘时用于缓解标签拥挤）

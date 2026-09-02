@@ -46,7 +46,13 @@
           }
         ]
       },
-      "display_name": "图1 财税SaaS市场规模与增速（2022-2027E）.png"
+      "display_name": "图1 财税SaaS市场规模与增速（2022-2027E）.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-02",
@@ -75,7 +81,13 @@
           36.0
         ]
       },
-      "display_name": "图2 市场份额分布（2025）.png"
+      "display_name": "图2 市场份额分布（2025）.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-03",
@@ -144,7 +156,13 @@
           }
         ]
       },
-      "display_name": "图3 头部玩家多维能力对比.png"
+      "display_name": "图3 头部玩家多维能力对比.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-04",
@@ -179,7 +197,13 @@
           }
         ]
       },
-      "display_name": "图4 各产品线年费价格带对比.png"
+      "display_name": "图4 各产品线年费价格带对比.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-05",
@@ -243,7 +267,13 @@
           ]
         ]
       },
-      "display_name": "图5 风险概率×影响矩阵（2026）.png"
+      "display_name": "图5 风险概率×影响矩阵（2026）.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-06",
@@ -292,7 +322,13 @@
           }
         ]
       },
-      "display_name": "图6 核心经济模型：CAC与LTV对比.png"
+      "display_name": "图6 核心经济模型：CAC与LTV对比.png",
+      "card_id": "K01",
+      "source_id": "SRC-001",
+      "year": 2025,
+      "unit": "演示单位",
+      "definition": "演示数据，仅用于验证链路，正式报告不得使用",
+      "base_period": "演示区间"
     },
     {
       "id": "chart-07",

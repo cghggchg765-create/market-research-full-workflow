@@ -1,0 +1,14 @@
+name: market-research-full-workflow
+display_name: 标准行业深度研究工作流
+description: 多源证据采集、知识卡片、行业结构分析、8片并行写作、可视化、联合审查、润色与飞书交付。
+mode: orchestrated
+entrypoint: ../SKILL.md
+artifacts:
+  - .workflow.json
+  - evidence/source-ledger.jsonl
+  - evidence/knowledge-cards.md
+  - analysis/judgment-spine.md
+  - parts/
+  - charts/
+  - reviews/
+  - output/report.md

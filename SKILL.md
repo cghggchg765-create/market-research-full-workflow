@@ -1,855 +1,326 @@
 ---
-name: "market-research-full-workflow"
-description: "多Agent市场调研工作流。数据收集→数据分析→框架→框架审核→撰写→事实核查→质量审核→飞书交付。当用户提出市场调研、行业分析、竞品分析、用户调研、赛道摸底、项目可行性分析、商业调研、用户画像搭建、竞品优劣势拆解、盈利模式调研相关需求时自动触发。不触发其他无关技能。"
+name: market-research-full-workflow
+description: 面向战略、投资与商业化决策的标准行业深度研究工作流。通过任务路由、多源取证、证据台账、知识卡片、行业结构分析、判断主线、8片并行写作、按内容选型可视化、视觉检查、事实核查、质量审核、联合逻辑审查、润色和飞书交付，生成可追溯的行业报告。
 ---
 
-# 多Agent市场调研工作流 — 编排器（Orchestrator）
+# 标准行业深度研究工作流
 
-## 你的角色
+## 1. 规则优先级
 
-你是调研工作流的编排者。你不直接做调研、不直接写报告，你负责：
-1. 解析用户需求
-2. 按流程派发任务给各 subagent
-3. 在 agent 之间传递数据
-4. 控制质量关卡
-5. 最终交付
+1. `references/industry-report-standard.md` 是**唯一章节结构事实源**。它定义标准行业报告骨架和 8 个生产分片；不得改成学术论文九章，也不得恢复历史 6 片结构。
+2. `references/academic-style.md` 只约束证据、引用、研究透明度、语言和 Markdown，不定义行业报告目录。
+3. `references/data-collection-protocol.md`、`data-grading-and-citation.md` 定义取证通道、证据等级和数据核验纪律。
+4. `references/knowledge-cards.md` 定义证据台账、知识卡片、原始资料下载和 Agent 联动。
+5. `references/chart-guidance.md`、`chart-inspection.md` 定义图表选型、生成和视觉检查。
+6. 正文不得暴露 Agent、lane、tier、门禁、检索轮次或本 Skill 名称；不得出现 `[n]` 编号引用、`【事实】`/`【推断】` 等内部标签或 `**关键词**：内容` 句式。
 
-## 工作流程总览
+## 2. 适用范围与路由
+
+先读取 `references/task-router.md`，判断用户是否需要中长期完整行业报告。提取并落盘 `inputs/routing.json`：
+
+### 流程总览（含同步等待门）
 
 ```
-用户输入
+Step 0 需求解析与路由（落盘 inputs/routing.json）
    ↓
-Step 0: 需求解析
+[WAIT] 路由通过
    ↓
-Step 1a: 数据收集（3个收集 agent 并行）
-   ├── 行业数据收集 agent
-   ├── 竞品数据收集 agent
-   └── 用户数据收集 agent
-   ↓
-Step 1b: 数据分析（3个分析 agent 并行）+ Step 1c 知识固化（1个知识主管并行）
-   ├── 行业数据分析 agent（接收行业原始数据 + 竞品/用户摘要）
-   ├── 竞品数据分析 agent（接收竞品原始数据 + 行业/用户摘要）
-   ├── 用户数据分析 agent（接收用户原始数据 + 行业/竞品摘要）
-   └── 知识主管 agent（资料→知识卡片库 + 待下载清单→编排者下载原文）
-   ↓
-Step 2: 框架搭建（1个 agent）
-   ↓
-Step 2b: 框架审核（1个 agent）
-   ↓ 有问题 → 打回 Step 2 修改（最多1轮）
-Step 3: 报告撰写（分片并行：8个 writer agent 同步写 parts/ 分片 → 组装校验，≥3万字）
-   ↓
-Step 3b: 图表规划与生成（1个可视化 agent → specs.json → 脚本出 PNG）
-   ↓
-Step 3b-2: 图表视觉检查（程序校验 WARN + 模型逐张读图，🔴问题重绘≤2轮）
-   ↓
-Step 3c: 图表与报告合并（report.md 占位回填图片引用 + mermaid）
-   ↓
-Step 4a: 事实核查（分片抽查制，独立搜索验证 + 章节一致性）
-   ↓ 有问题 → 打回对应分片修改（最多2轮）
-Step 4b: 质量审核（逐章过检 + 图表规范）
-   ↓ 有问题 → 打回对应分片修改（最多2轮）
-Step 4c: 联合逻辑审查（跨章数据自洽/结论支撑/因果链/图表逻辑/术语统一）
-   ↓ 有问题 → 打回对应分片修改（最多2轮）
-Step 4d: 润色（术语/语气/衔接/精炼/格式，全分片精修）
-   ↓ 有移交问题 → 回对应通道处理
-Step 5: 交付（本地文件 + 图表 + 推送飞书文档）
+Step 1a 证据采集（3 collector 并行）
+   ↓ [WAIT] 3/3 返回并核验来源条目，缺一不推进
+Step 1b 数据分析（3 analyzer 并行）＋ Step 1c 知识固化（1 curator 并行）
+   ↓ [WAIT] 4/4 返回；analysis/*.md、knowledge-cards、source-ledger 全部落盘
+Step 2 判断主线与框架（judgment-spine.md + framework.md）
+   ↓ [WAIT] 主线与框架冻结，审核通过
+Step 2b 框架审核
+   ↓ [WAIT] framework-review.md 生成
+Step 3 八片写作（8 writer 并行，写入 parts/）
+   ∥ 同步启动 3b 图表规划（visualizer → specs.json，只读分析+框架+台账，不依赖正文；写作与图表并行）
+   ↓ [WAIT] 8/8 分片落盘且单片校验通过；specs 证据字段齐全
+Step 3-3 组装（assemble_report.py --spec → output/report.md，一次注入图表索引）
+   ↓ [WAIT] 组装门禁通过；PNG/mermaid 已生成并视觉检查通过
+Step 3-2 图表视觉检查（WARN 图必检+分片抽查）→ 3c 图表回填
+   ↓ [WAIT] 图号连续、检查记录落盘
+Step 4a 事实核查 ∥ Step 4b 质量审核（两审并行，各自落盘）
+   ↓ [WAIT] fact-check.md 与 quality-review.md 均生成
+Step 4c 联合逻辑审查（依赖 fact 结论）
+   ↓ [WAIT] logic-review.md 生成且判定通过
+Step 4d 润色 → 重新组装 + validate
+   ↓ [WAIT] polish-report.md 落盘，validate exit 0
+Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进）
 ```
 
----
+**任何 `[WAIT]` 未满足时，不得启动其下一个阶段；先重试/补齐前置产物，再继续。** 详细门槛见 3.5 节。
 
----
+- `topic`、`industry`、`focus`、`depth`、`audience`、`context`
+- `report_type`：行业全景/子赛道/技术路线/周期位置/政策主题
+- `industry_structure`：产业链型/网络型/资产负债型/单店模型型
+- `decision_question`：投资/进入/战略落地/观望/退出
+- `exclusions`：明确不回答的窄问题
 
-## Step 0: 需求解析
+以下任务不触发本流程：单公司、单日涨跌、单一财报、单一宏观事件、一句话科普、翻译。若路由不通过，简要说明应使用其他场景，不强行生成长报告。
 
-从用户输入中提取以下信息。用户没有明确提供的，按默认值处理，不要反复追问。
+## 3. 运行目录与状态
 
-| 字段 | 说明 | 默认值 |
-|------|------|--------|
-| topic | 调研主题 | 必须有 |
-| industry | 所属行业/赛道 | 从主题推断 |
-| focus | 特别关注的方向 | 全面覆盖 |
-| depth | 调研深度 | standard（标准） |
-| audience | 报告读者 | 创始人/决策者 |
-| context | 背景信息 | 无 |
+每次任务建立独立运行目录，不把多个任务混到同一 `parts/` 或 `charts/`：
 
-调研深度说明：
-- `quick`：收集 agent 搜索 2 轮，覆盖 5+ 来源，报告 **20000-25000 字**
-- `standard`：收集 agent 搜索 3-4 轮，覆盖 8-12 来源，报告 **30000-35000 字**
-- `deep`：收集 agent 搜索 5+ 轮，覆盖 15+ 来源，报告 **40000-50000 字**
-
-默认使用 `standard`。
-
-需求解析完成后，输出一句话告诉用户：
-> 开始调研「{topic}」，预计经过数据收集→数据分析→框架→框架审核→撰写→双重审核→飞书交付，全程自动执行。
-
----
-
-## Step 1a: 数据收集（并行）
-
-读取以下 3 个 agent prompt 文件，然后使用 Agent tool **并行**启动 3 个 subagent：
-
-1. 读取 `agents/collector-industry.md` → 启动行业数据收集 agent
-2. 读取 `agents/collector-competitor.md` → 启动竞品数据收集 agent
-3. 读取 `agents/collector-user.md` → 启动用户数据收集 agent
-
-**关键：3 个 Agent tool 调用必须在同一个 response 中并行发出。**
-
-每个 agent 的 prompt 构成：
-```
-[agent prompt 文件内容]
-
----
-
-## 本次收集任务
-
-- 调研主题：{topic}
-- 所属行业：{industry}
-- 特别关注：{focus}
-- 调研深度：{depth}
-- 背景信息：{context}
-
-请开始数据收集，按输出格式返回结构化原始数据。
-```
-
-等待 3 个 agent 全部返回后，进入 Step 1b。
-
-如果某个 agent 返回的结果明显不完整（如数据点少于 3 个），在传给下一步之前标注该部分"数据不足"。
-
----
-
-## Step 1b: 数据分析（并行）
-
-读取以下 3 个 agent prompt 文件，然后使用 Agent tool **并行**启动 3 个 subagent：
-
-1. 读取 `agents/analyzer-industry.md` → 启动行业数据分析 agent
-2. 读取 `agents/analyzer-competitor.md` → 启动竞品数据分析 agent
-3. 读取 `agents/analyzer-user.md` → 启动用户数据分析 agent
-
-**关键：3 个 Agent tool 调用必须在同一个 response 中并行发出。**
-
-每个分析 agent 接收：自己领域的完整原始数据 + 其他两个领域的摘要（用于交叉参考）。
-
-**摘要生成规则：** 编排者从收集 agent 的返回结果中提取前 500 字作为摘要传给其他领域的分析 agent。不修改原始数据内容。
-
-行业分析 agent 的 prompt 构成：
-```
-[analyzer-industry.md 内容]
-
----
-
-## 本次分析任务
-
-调研主题：{topic}
-
-### 行业原始数据（完整）
-{Step 1a 行业收集 agent 的完整返回结果}
-
-### 竞品原始数据（摘要，供交叉参考）
-{Step 1a 竞品收集 agent 返回结果的前 500 字摘要}
-
-### 用户原始数据（摘要，供交叉参考）
-{Step 1a 用户收集 agent 返回结果的前 500 字摘要}
-
-请基于以上数据进行分析，按输出格式返回结果。
+```text
+C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
+├── .workflow.json
+├── inputs/request.md
+├── inputs/routing.json
+├── evidence/collection-plan.industry.md
+├── evidence/collection-plan.competitor.md
+├── evidence/collection-plan.user.md
+├── evidence/collection-report.industry.md
+├── evidence/collection-report.competitor.md
+├── evidence/collection-report.user.md
+├── evidence/knowledge-cards.industry.md
+├── evidence/knowledge-cards.competitor.md
+├── evidence/knowledge-cards.user.md
+├── evidence/source-ledger.jsonl
+├── evidence/evidence-summary.json
+├── evidence/knowledge-cards.md
+├── evidence/card-index.json
+├── evidence/inject.{02..08}.json
+├── evidence/cards.{02..08}.md
+├── evidence/download-manifest.json
+├── evidence/download-results.json
+├── evidence/gaps.md
+├── evidence/sources/
+├── analysis/industry.md
+├── analysis/competitor.md
+├── analysis/user.md
+├── analysis/judgment-spine.md
+├── analysis/framework.md
+├── analysis/framework-review.md
+├── parts/01-executive-summary.md
+├── parts/02-industry-definition-scale.md
+├── parts/03-structure-competition.md
+├── parts/04-user-insight.md
+├── parts/05-drivers-policy.md
+├── parts/06-trends-opportunities.md
+├── parts/07-commercialization-roadmap.md
+├── parts/08-risk-conclusion-references.md
+├── charts/specs.json
+├── charts/*.png
+├── charts/inspection.json
+├── reviews/fact-check.md
+├── reviews/quality-review.md
+├── reviews/logic-review.md
+├── reviews/polish-report.md
+├── output/report.md
+├── output/report.local.md
+├── output/report.feishu.md
+└── logs/
 ```
 
-竞品分析 agent 和用户分析 agent 的 prompt 构成类似，各自接收自己领域的完整数据 + 其他两个领域的摘要。
+使用 `scripts/report/workflow_state.py` 原子更新 `.workflow.json`。状态至少包括每阶段 `status`、`retries`、`rounds`、输入/输出路径、文件哈希和错误原因。中断后先读状态，跳过产物完整且校验通过的阶段，从最近失败阶段恢复。
 
-**并行启动 Step 1c 知识固化**（与 1b 同一 response 并行发出第 4 个 agent）——见下方 Step 1c。
+## 3.5 阶段同步与进入门槛（必须先等齐再推进）
 
-等待 3 个 agent 全部返回后，进入 Step 2。
+编排者是**串行调度器**：同一个并行组内的子 agent 并行执行，但**组与组之间必须严格串行**，且下游阶段只有在**全部前置产物就绪并通过校验**后才能启动。不得"先写着、后面再补数据"，不得在子 agent 未返回时提前创建下一阶段的产物。
 
----
+### 同步原则
 
-## Step 1c: 资料下载与知识卡片固化
+1. 每次启动一个并行组后，编排者**必须等待该组全部成员返回**，逐份检查结果：非空、格式合法、关键字段齐全。
+2. 任一副产物不满足门槛时：先按第 4 节重试补齐；重试后仍失败 → 该阶段标记 `degraded`，**依赖它的下游阶段不得正常启动**；确需继续时，必须把降级影响写入交付摘要。
+3. 产物检查以「文件存在 + 非空 + 能通过对应校验」为准，不以子 agent 的自述为准；校验命令见下表。
+4. 每个并行组结束后，编排者在 `.workflow.json` 把该阶段写为 `done`，才允许进入下一阶段。
 
-读取 `agents/knowledge-curator.md` 和 `references/knowledge-cards.md`，与 Step 1b **并行**启动知识主管 agent。
+### 阶段依赖与门槛表
 
-prompt 构成：
-```
-[knowledge-curator.md 内容]
+| 阶段 | 并行组 | 启动前提（全部满足才可启动） | 就绪校验 |
+|---|---|---|---|
+| 1a 采集 | 3 个 collector 并行 | 任务路由通过 | 3/3 返回；来源条目非空且含 URL/数值/口径 |
+| 1b 分析 + 1c 知识固化 | 3 analyzer + 1 curator 并行 | 1a 的 3 份结果全部落盘；source-ledger 初稿可读 | 4/4 返回；`analysis/industry.md`、`analysis/competitor.md`、`analysis/user.md`、`evidence/knowledge-cards.md`、`evidence/source-ledger.jsonl` 存在且非空 |
+| 2 框架 + 主线 | framework | 3 份分析落盘；知识卡片就绪；行业结构类型确定 | `analysis/framework.md` 与 `analysis/judgment-spine.md` 存在且包含主线/三情景/T 信号 |
+| 2b 框架审核 | framework-reviewer | 框架与主线冻结 | `analysis/framework-review.md` 落盘且含评分/通过判定 |
+| 3 八片写作 ∥ 3b 图表规划 | 8 writer + 1 visualizer 并行 | 主线冻结；框架冻结；章节规划表生成；知识卡片/台账就绪 | 8/8 `parts/*.md` 存在、非空、UTF-8、单片校验通过、字数达标；`charts/specs.json` 生成且每图含 8 证据字段 |
+| 3-3 组装（带 spec） | 编排者 | 8 片与 specs 均就绪；PNG 已生成 | `report.md` 生成；字数/图号/索引/引用/语法门禁全过 |
+| 3-2 图表视觉检查 + 3c 回填 | 编排者（可按题材分片并行） | 组装通过；PNG 存在 | 图号连续、`charts/inspection.json` 落盘、正文图引用完整 |
+| 4a 事实核查 ∥ 4b 质量审核 | fact-checker ∥ quality-reviewer（并行） | 报告与图表稳定（两者互不依赖输出） | `reviews/fact-check.md`、`reviews/quality-review.md` 均落盘 |
+| 4c 联合逻辑审查 | logic-auditor | 4a/4b 均完成 | `reviews/logic-review.md` 落盘且判定通过 |
+| 4d 润色 | polisher | 4c 通过 | `reviews/polish-report.md` 落盘；润色后必须重新组装并 validate exit 0 |
+| 5 交付 | 编排者 | 最终门禁全部通过 | `scripts/report/validate_report.py` exit 0；`report.feishu.md` 生成；飞书回读通过（可与交付摘要并行） |
 
----
+### 等待动作示例（编排者必须执行）
 
-## 知识卡片规范
-[knowledge-cards.md 内容]
+- 启动 1a 后，**等待 3/3 收集返回再进入 1b/1c**；若只有 2/3 返回，绝不开始分析或写作。
+- 启动 1b/1c 后，**等待 4/4 返回再进入框架**；knowledge-cards 或任一分析文件缺失时，不推进。
+- 框架与主线未冻结、规划表未生成前，**不启动 Writer 与 visualizer**。
+- 8 个 Writer 与 visualizer 是同一并行组：**等待 9/9 全部就绪**（8 片 + specs）才组装；visualizer 只读分析/框架/台账，不依赖正文。
+- 4a 事实核查与 4b 质量审核是并行组：**两审都落盘后**才进入 4c；不要等 fact 完成才开始 quality。
+- 下载 `download_sources.py` 属于后台任务：启动后不阻塞 Step 2/3，只需在 4a 前完成。
+- 任一并行组出现成员未返回时：不要把"未返回"当作"已完成"，也不要基于部分结果先写下游章节；按第 4 节重试该成员，重试后仍失败则标记 `degraded` 并暂停依赖该产物的一切下游产出。
 
----
+## 4. 统一重试策略
 
-## 本次任务
+每个阶段最多两次重发：
 
-调研主题：{topic}
+1. 原样重试一次，处理瞬时网络、模型和文件系统故障。
+2. 策略重试一次，补上下文、拆小任务、换检索词或换备用 Agent。
+3. 仍失败则写入 `degraded` 状态并说明原因，不伪造成功。
 
-### 行业收集结果（含全部来源/URL）
-{Step 1a 行业收集 agent 的返回结果}
+审核“打回”是质量轮次，不与故障重试混计。论文付费墙、未授权资料、不存在的 URL 不反复重试。
 
-### 竞品收集结果（含全部来源/URL）
-{Step 1a 竞品收集 agent 的返回结果}
+## 5. 证据采集与知识固化
 
-### 用户收集结果（含全部来源/URL）
-{Step 1a 用户收集 agent 的返回结果}
+### 5.1 三路并行采集（按报告需求规划 + 分域卡片就地产出）
 
-请输出知识卡片库全文与待下载清单。
-```
+读取 `data-collection-protocol.md`、`data-grading-and-citation.md` 和 `references/industry-report-standard.md`，在同一响应中并行启动：
 
-**编排者收到后执行**：
+- 行业证据 Agent：定义、规模、增速、产业链、政策、周期。
+- 竞争证据 Agent：玩家、产品、价格、份额、经营指标、融资、反馈。
+- 用户证据 Agent：用户分层、场景、痛点、付费、流失、替代方案。
 
-1. 在交付目录创建 `knowledge/` 与 `knowledge/sources/`，将卡片库全文写入 `knowledge/knowledge-cards.md`
-2. 按「待下载清单」逐条下载（可下载项）：
+每个采集 Agent 必须完成四件事（均落盘到 `{run_dir}/evidence/`）：
+
+1. **按报告需求规划搜索**：对照行业报告六个主体板块列出本域问题清单，写入 `collection-plan.{domain}.md`，再按问题搜索，以覆盖度停机。
+2. **返回结构化数据表**：每条来源含标题/作者机构/日期/URL/DOI/类型/原始值/单位/口径/基期/取数通道/证据等级/可下载性/对应章节。
+3. **分域知识卡片就地产出**：搜索完成后立即把关键证据整理为 `knowledge-cards.{domain}.md`（domain=industry/competitor/user），不经过主 Agent 转述，避免知识遗漏。
+4. **分域证据盘点报告**：写 `collection-report.{domain}.md`，含问题对照、来源 A/B/C 汇总、关键冲突、数据缺口和建议支撑章节。
+
+核心维度（规模、增速、格局、价格、盈利、政策、需求）各至少两条独立证据；政策至少五条；建议来源不少于十八条。缺数据写入各自盘点报告的缺口部分，不得用常识补齐。
+
+### 5.2 分域卡片合并归一与原始资料
+
+**同步门：必须等 5.1 的 3 路采集全部返回、且三份分域卡片与盘点报告均已落盘后，才与三路分析 Agent 一起启动** `agents/knowledge-curator.md`。knowledge-curator 不再接收主 Agent 转述，而是直接读取分域产物并做**合并归一**：
+
+- 读 `evidence/knowledge-cards.{industry,competitor,user}.md`，按 URL/DOI/标题去重，统一编号为 `evidence/knowledge-cards.md`（K01…Kn，保留 domain 字段）。
+- 生成 `evidence/source-ledger.jsonl`（source_id/card_id/title/author_or_org/year/url/source_level/source_value/unit/definition/base_period 为必填；正文用途/验证状态可选）。
+- 生成 `evidence/download-manifest.json` 和 `evidence/gaps.md`。
+
+编排者随后执行：
+
+1. `scripts/report/evidence_ledger.py` 校验台账合法性。
+2. `scripts/report/card_index.py --cards knowledge-cards.md --ledger source-ledger.jsonl --out card-index.json` 生成卡片索引（供按章节拆解）。
+3. `scripts/report/download_sources.py` 下载公开、合法、无需绕过访问控制的论文 PDF、官方报告、CSV/XLSX 到 `evidence/sources/`（**并发下载、单文件 ≤50MB、超时 15s、失败重试一次**），记录 SHA-256/字节数；失败、登录、付费或反爬资料保留卡片并写明原因，不伪造文件。**该步骤是后台任务：启动后不阻塞 Step 2/3，只需在 4a 前完成。**
+
+知识卡片的文件路径统一是 `evidence/knowledge-cards.md`，禁止在同一运行目录另建 `knowledge/` 平行目录。
+
+## 6. 行业结构分析与判断主线
+
+**同步门：启动分析前必须确认 3 路采集结果、`evidence/source-ledger.jsonl` 初稿、`evidence/knowledge-cards.md` 均已就绪；启动框架前必须等待 3 路分析 Agent 与知识主管全部返回。**
+
+读取 `references/industry-structure-playbooks.md`、`references/analysis-framework.md`、`references/insight-spine.md`。三路分析 Agent 并行消费完整证据、结构化跨域摘要、知识卡片和行业类型 playbook，输出到 `analysis/`。
+
+框架 Agent 生成 `analysis/judgment-spine.md`，至少包含：
+
+- 决策问题与研究范围。
+- 一句话主线（可验证、可推翻，含时间窗口）。
+- 市场共识、非共识判断、3-5 个核心数据锚点。
+- 因果链、利润池/价值迁移。
+- 乐观/中性/悲观三情景及结果。
+- T1…Tn 验证/证伪信号。
+- 六个主体板块的子命题、证据和 Kxx 映射。
+
+框架 Agent 再依据 `industry-report-standard.md` 生成标准行业报告大纲；框架审核 Agent 输出 `analysis/framework-review.md`，低于 7/10 最多打回一轮。
+
+## 7. 8 片并行写作（与图表规划组成同一并行组）
+
+**同步门：主线与框架冻结、章节规划表生成后，在同一个 response 中**并行启动 8 个 Writer + 1 个 visualizer**；图片编号在规划表中预分配，两方共用，避免并行冲突。等待 9/9 就绪后才组装。**
+
+- 01：核心观点、摘要、关键词、共识/非共识、主线论证链。
+- 02：行业定义、规模测算、增速、生命周期、历史坐标。
+- 03：产业链、利润池、供需、竞争格局、玩家、终局。
+- 04：用户分层、需求、决策链路、付费意愿和行为证据。
+- 05：五维驱动—制约、技术路线、政策时间线与监管边界。
+- 06：趋势、预期差、反方观点、三情景与验证信号。
+- 07：商业模式、单位经济、盈利质量、现金流、落地路径与 KPI。
+- 08：风险提示、结论、展望、参考文献、方法、术语、免责声明。
+
+这些职责必须映射到固定分片文件名（与 `industry-report-standard.md` 和脚本一致，章节 token「一、…七、」对应 02…08）：`02-industry-definition-scale.md`、`03-structure-competition.md`、`04-user-insight.md`、`05-drivers-policy.md`、`06-trends-opportunities.md`、`07-commercialization-roadmap.md`、`08-risk-conclusion-references.md`。
+
+### 章节证据注入与图号预分配（并行组开工前完成）
+
+1. 编排者用 `scripts/report/card_index.py` 按章节生成**证据注入包**：
+   ```text
+   {skill_python} scripts/report/card_index.py --cards {run_dir}/evidence/knowledge-cards.md \
+     --ledger {run_dir}/evidence/source-ledger.jsonl \
+     --out {run_dir}/evidence/card-index.json --chapter "{章节名}"
    ```
-   curl -L --max-time 30 -o "{交付目录}/knowledge/sources/{目标文件}" "{url}"
+   产出 `evidence/inject.{02|03|…}.json`（本章卡片 + 台账行）与 `evidence/cards.{02|03|…}.md`（卡片片段）。
+2. **图号预分配**列入章节规划表：每章分配连续图号（如 02 章图1、03 章图2、04 章图3…），visualizer 按规划表生成 specs（每图 `id=chart-NN`、`display_name=图N …`），Writer 按同一张表写占位 `![图N 标题]({run_dir}/charts/待定.png)`。
+3. 每个 Writer 收到：绝对分片路径、本章配额、全文主线、全局大纲、本章证据注入包、章节 Kxx、**本章图号区间**、证据台账摘要、术语表，以及**「本章关键数据点（内嵌必用）」**——编排者把注入包中该章每张卡片的关键数据点原文（数值+单位+口径+年份）直接粘贴进 Writer prompt，**不是只给文件路径**。Writer 必须把至少 80% 的论点建立在粘贴的数据点上并写入正文数值；缺证据写入待核问题。
+4. **单片即时校验（写作完成即执行）**：每个 Writer 落盘后，编排者立即运行
+   ```text
+   {skill_python} scripts/report/validate_report.py --stage part --file {run_dir}/parts/{分片}.md
    ```
-   下载成功（HTTP 200 且文件 >1KB）→ 更新卡片「本地文件」字段为相对路径；失败/超时/需登录 → 卡片保留，标记"未下载（原因）"，不伪造
-3. 浏览器可用时优先用浏览器直接打开页面另存（Dynamic PDF 场景）；无法获取原文的仅留卡片
-4. 下载完成后再进入 Step 2（若下载耗时过长，可先进入 Step 2，下载在后台完成，Step 3 前卡片库就绪即可）
+   校验不过（标签句式/数字小节/禁则/清单化/非 canonical 命名）→ 打回该 Writer 修改，**不得进入组装**；8/8 通过后才运行组装。
+4. visualizer 收到：分析结果、框架、规划表图号区间、知识卡片/台账；产出 `charts/specs.json`（8 证据字段齐全），随后运行 `gen_chart.py` 生成 PNG 与语义副本。
+5. 编排者检查 8 片 UTF-8/文件名/mtime/字数/章节职责，并检查 specs 图号与规划表一致；任一未就绪不得进入组装。
 
-**联动约定**：
-- 后续章节规划（Step 3-1）每章主用数据标注卡片 id（Kxx）；writer 按需 Read `knowledge/knowledge-cards.md`
-- 事实核查（Step 4a）优先用 `knowledge/sources/` 原始文件交叉验证
-- visualizer（Step 3b）的 specs source 引用卡片来源与编号
-- 参考文献（GB/T 7714）条目由卡片字段直接生成
+标准档正文净字数 30,000-35,000 字；quick 20,000-25,000；deep 40,000-50,000（组装时对 quick 用 `--target-words 20000`、deep 用 `--target-words 40000` 显式传参，防止被 standard 门槛误杀）。参考文献、免责声明和原始资料不计入正文净字数。组装脚本按 8 片固定顺序生成 `output/report.md`。
 
----
+## 8. 图表与视觉检查（与 8 片写作并行启动）
 
-## Step 2: 框架搭建
+可视化 Agent 与 Writer 在框架冻结后**同一并行组启动**，只读分析结果、框架、规划表图号区间与知识卡片。按实际数据选型，至少 5 张，standard 推荐 6-8 张，deep 推荐 8-12 张。每个 PNG spec 必须包含 `card_id/source_id/year/unit/definition/base_period/source/position`；流程/链路类使用 mermaid（不占图号，仅以代码块呈现）。
 
-读取 `agents/framework.md`，启动框架 agent。
+使用独立 Python 环境运行：
 
-prompt 构成：
-```
-[framework.md 内容]
-
----
-
-## 本次任务
-
-调研主题：{topic}
-报告读者：{audience}
-
-### 行业分析结果
-{Step 1b 行业分析 agent 的返回结果}
-
-### 竞品分析结果
-{Step 1b 竞品分析 agent 的返回结果}
-
-### 用户分析结果
-{Step 1b 用户分析 agent 的返回结果}
-
-请基于以上分析结果设计报告框架。**输出必须包含「## 主线（全文回扣）」部分**（单句断言 + 主线支撑数据清单），并保证各章节要点与主线呼应。
+```text
+{skill_python} "{skill_root}/scripts/charts/gen_chart.py" \
+  --spec "{run_dir}/charts/specs.json" \
+  --outdir "{run_dir}/charts"
 ```
 
----
+脚本自动预检文字重叠、出界、图例遮挡、轴标签重叠和字体；编排者读取 `references/chart-inspection.md`，用视觉能力检查 PNG：**程序 WARN 图必检 + 每类图型首张必检 + 其余抽样（或拆 2 个子 agent 各看一半）**，记录 `charts/inspection.json`。Critical 问题最多重绘两轮，仍失败则移除图引用并用表格替代。
 
-## Step 2b: 框架审核
+## 9. 事实、质量、逻辑与润色
 
-读取 `agents/framework-reviewer.md`，启动框架审核 agent。
+依赖关系：**fact-checker 与 quality-reviewer 并行**（两者输入相同、互不依赖输出）→ logic-auditor（需要 fact 结论）→ polisher（需要逻辑通过）。
 
-prompt 构成：
-```
-[framework-reviewer.md 内容]
+1. `fact-checker` 与 `quality-reviewer` **同一并行组启动**：
+   - fact：每章 3-5 个关键数字，优先读取 `evidence/sources/` 原文，再联网补证；写 `reviews/fact-check.md`。
+   - quality：8 片逐章 + 全局检查结构、数据、表格、图表、Markdown；写 `reviews/quality-review.md`。
+2. **等待两审都落盘**后启动 `logic-auditor`：检查分项/总计、趋势、单位/基期、同指标跨章、主线、风险-建议、图文方向；写 `reviews/logic-review.md`。
+3. `polisher`：只改术语、语气、衔接、句式和格式，不改事实/数字/结论/图号；写 `reviews/polish-report.md`；润色后必须重新组装并 validate。
 
----
+任何打回按问题定位到具体分片；**多片打回时并行重写对应分片**（同一 response 内多个 Writer），修改后重新组装并运行相应门禁。每类审核最多 2 轮打回，超过则在交付摘要记录未决问题。
 
-## 待审核框架
+## 10. Markdown 与交付门禁
 
-{Step 2 框架 agent 的返回结果}
+使用 `scripts/report/assemble_report.py`、`scripts/report/evidence_ledger.py` 和 `scripts/report/validate_report.py`（若已存在则先确认参数）执行：
 
-## 分析结果摘要（供对齐检查）
+- 标准行业报告章节和 8 片完整。
+- H1 唯一、标题层级正确、列表使用 `-`、无纯文本伪标题。
+- 正文净字数达到档位下限。
+- 每个主体板块有论述、表格和 `回扣主线`（按 canonical schema）。
+- 表名在表上方并空一行；图名在图下方并空一行。
+- 作者/机构+年份引用与参考文献双向勾稽，禁止 `[n]`。
+- 每个关键数字可追溯到 source_id/card_id、单位、口径、基期。
+- 代码块闭合、表格列一致、图片路径存在、图号/索引连续。
+- 不出现 `【事实】`、`【推断】`、`**关键词**：内容`、原始 HTML、裸 URL、base64 图片。
+- 事实、质量、逻辑、润色结果均已落盘。
 
-### 行业分析核心发现
-{Step 1b 行业分析 agent 返回结果中的"核心分析结论"部分}
+## 11. 飞书交付（受硬门禁保护的唯一交付通道）
 
-### 竞品分析核心发现
-{Step 1b 竞品分析 agent 返回结果中的"竞争格局判断"和"竞争空白与机会"部分}
+本地版 `output/report.local.md` 保留绝对图片路径；运行 `scripts/report/make_feishu_copy.py` 生成 `output/report.feishu.md`，自动校验图文件并把绝对路径转换为 `@./charts/`，中文/空格/括号路径使用尖括号。
 
-### 用户分析核心发现
-{Step 1b 用户分析 agent 返回结果中的"需求验证清单"和"核心痛点"部分}
+**交付前置清单（缺一即禁止创建飞书文档）：**
 
-请按审核清单逐项检查。
-```
+1. 8 片全部通过单片校验（`validate_report.py --stage part`）。
+2. `assemble_report.py` 组装通过，且 `output/report.md` 含「可视化图表索引」。
+3. `charts/specs.json` 存在且 PNG ≥5；每张 PNG 图已被正文 `![图N …]` 实际引用（图号连续，无幽灵图号/无缺图）。
+4. `charts/inspection.json` 存在（图表视觉检查已执行）。
+5. `scripts/report/validate_report.py --stage final --run-dir {run_dir}` 退出码 0。
+6. 使用 `scripts/report/upload_report.py --file {飞书版} --manifest {run_dir}/delivery.json --run-dir {run_dir}` 上传——**该脚本在上传前会强制执行第 3-5 项校验，校验不过拒绝执行 lark-cli**。
 
-**审核结果判定：**
+**禁止跳步**：未满足上述清单时，不得调用 `lark-cli`/lark-doc 创建飞书文档，也不得把 `report.md` 当作最终交付物向外宣称完成。可视化和图表检查被视为标准产物，跳过即视为流程违规；确因数据不足无法成图时，须在 `charts/inspection.json` 与交付摘要中记录缺图原因，且图表数须 ≥5 或明确说明降级为表格并获编排者确认。
 
-- 框架评分 < 7/10 或明确判定"打回" → 打回 Step 2 框架 agent 修改
-- 框架评分 ≥ 7/10 且判定"通过" → 进入 Step 3
+上传后回读验证：标题层级、表格、图片块数量、Mermaid/whiteboard 块、图名行和链接。网络失败按指数退避最多两次，最终保留本地交付并说明原因。
 
-**打回修改流程：**
+## 12. 断点续跑与输出摘要
 
-如需打回，重新启动框架 agent（Step 2），prompt 中追加：
-```
-## 修改要求（来自框架审核）
+### 断点续跑
 
-{框架审核 agent 的修改建议}
+每个阶段开始前读取 `.workflow.json`：
 
-请逐条修改后返回完整框架。
-```
+- `status=done` 且产物存在、哈希未变、对应校验通过 → 跳过该阶段。
+- `status=failed` → 按统一重试策略重试，不从头重跑其他已完成阶段。
+- `status=degraded` → 继续前先在交付摘要记录缺口，并把受影响结论/图表标为有限证据。
+- Agent 写入文件后由编排者检查绝对路径、UTF-8、文件大小、修改时间和内容摘要，再将状态写为 done。
 
-**最多打回 1 轮。** 框架审核是轻量关卡，1 轮修改后无论结果如何，进入 Step 3。
+### 输出摘要
 
----
-
-## Step 3: 报告撰写（分片并行）
-
-报告按 `references/report-structure.md` 的 8 个章节拆分为独立分片，**8 个撰写 agent 并行写作**，再组装校验。总量目标按深度：quick 20000-25000 / standard 30000-35000 / deep 40000-50000 字，**默认达到 30000 字以上**。
-
-### Step 3-1: 章节规划
-
-读取 `references/report-structure.md`，编排者生成「章节规划表」：
-
-| 分片文件 | 章节 | standard 字数配额 |
-|---------|------|:----:|
-| 01-executive-summary.md | 核心观点（执行摘要，七段式） | 2500 |
-| 02-industry-overview.md | 行业定义、规模测算与历史坐标 | 4500 |
-| 03-structure-competition.md | 行业结构、竞争格局与格局演变 | 5000 |
-| 04-user-insight.md | 用户需求与行为洞察 | 4500 |
-| 05-business-model.md | 盈利模式与可行性 | 4500 |
-| 06-risk-opportunity.md | 风险评估与机会点 | 4000 |
-| 07-roadmap.md | 落地建议与行动计划 | 4000 |
-| 08-appendix.md | 附录与尾件（来源/方法/风险提示/结语/免责） | 3000 |
-
-- quick ×0.7、deep ×1.3 系数调整配额，各章至少 1500 字
-- 规划表必须包含：
-  - **主线**（Step 2 框架 agent 产出，原文照抄进规划表首行——全部 writer 共享）
-  - 每章**章节要点（3-6 条）**、**主用数据**（分析结果中对应部分，**标注知识卡片 id Kxx**）、**承接关系**（上章末句/下章首句的衔接提示）
-  - **数据来源标注纪律**：正文引用一律「（作者，年份）」（GB/T 7714，见 academic-style.md），不采用 [n] 编号制
-- 先规划后写作，规划表即并行写作的共享上下文（writer 可自行 Read `knowledge/knowledge-cards.md` 取卡片细节与原文）
-
-### Step 3-2: 并行撰写（8 个 writer agent 同步）
-
-读取 `agents/writer.md`，在**同一个 response 中并行启动 8 个撰写 agent**（每个写一个分片）。每个 writer 的 prompt 构成：
-
-```
-[writer.md 内容]
-
----
-
-## 本次任务
-
-调研主题：{topic}
-调研日期：{today}
-调研深度：{depth}
-我的章节：{0X-xxx}（{章节名}）
-字数要求：{本章配额} 字（±10%）
-数据来源标注：正文引用一律（作者，年份），不采用 [n] 编号制
-
-## 全文主线（每章末尾写「### 回扣主线」）
-{Step 2 框架 agent 产出的主线原文}
-
-## 全局大纲（其他章节标题与核心结论，避免重复与矛盾）
-{章节规划表中其他 7 章的标题 + 一句话核心结论}
-
-## 本章要点与本分片文件路径
-{规划表中本行：要点 / 分配到本章的分析数据 / 输出文件路径}
-
-## 分析数据（与本章相关的完整数据 + 其他领域摘要）
-{Step 1b 对应分析结果；本章不涉及的领域给摘要即可}
-
-## 知识卡片库（按需读取）
-{交付目录}/knowledge/knowledge-cards.md（本章主用数据的卡片 id 见规划表，写作时按需 Read 取数据点/来源/参考文献字段；本地文件在 knowledge/sources/ 可读原文）
-
-请按 writer.md 的风格模板库写作（章首引言段 / （一）级小节标题 / 整句加粗判断 / 表后资料来源行 / 演化叙事），写入 parts/{0X-xxx}.md 后返回：本片字数、本片参考文献条目（GB/T 7714 完整著录）。
-```
-
-- **每个 writer 必须自己用 Write 工具把内容写入交付目录的 `parts/0X-xxx.md`**（3 万字总量无法在对话中往返，直接落盘）
-- 图表占位沿用：本章需要图的位置留 `![图N 标题]({交付目录绝对路径}/charts/待定.png)` 占位（绝对路径；图号由 Step 3b 的 specs 顺序决定，先按规划占位）；图名行放在图片下方空行处
-- 编排者收集 8 份「参考文献条目」按作者姓氏首字母（中文拼音）排序合并为参考文献章节
-- 8 个 agent 并行完成后，各分片均已落盘 → 进入 Step 3-3
-
-### Step 3-3: 组装与校验
-
-在交付目录执行（skill 根目录）：
-
-```
-./.venv/Scripts/python.exe {skill}/scripts/report/assemble_report.py \
-  --parts-dir parts --out report.md --target-words {档位目标} --spec charts/specs.json
-```
-
-校验项（脚本自动检查并输出报告）：
-- 8 个分片齐全、非空
-- 总字数 ≥ 目标下限（容差 12%）——不足则定位字数缺口分的片
-- 图号连续（图1~图N 无缺号/重复）
-- 章节间大段重复检测（≥5 句相同 → 提示去重）
-- 自动生成「可视化图表索引」表并插入执行摘要之后
-
-**校验不通过** → 只重派对应分片的 writer（添加修改要求后重写该片）→ 重跑组装；最多 2 轮；仍不足在交付摘要注明实际字数。
-
----
-
-## Step 3b: 图表规划与生成
-
-读取 `agents/visualizer.md` 和 `references/chart-guidance.md`，启动可视化专员 agent。
-
-prompt 构成：
-```
-[visualizer.md 内容]
-
----
-
-## 图表选型与规范
-[chart-guidance.md 内容]
-
----
-
-## 本次任务
-
-调研主题：{topic}
-调研深度：{depth}
-
-### 报告框架
-{Step 2/2b 框架 agent 的最终返回结果}
-
-### 行业分析结果
-{Step 1b 行业分析 agent 的返回结果}
-
-### 竞品分析结果
-{Step 1b 竞品分析 agent 的返回结果}
-
-### 用户分析结果
-{Step 1b 用户分析 agent 的返回结果}
-
-### 知识卡片库（数据点/来源/口径校准用）
-{交付目录}/knowledge/knowledge-cards.md（specs 的 source 引用卡片来源机构与编号；图数据与卡片一致）
-
-### 行业原始数据（补充参考）
-{Step 1a 行业收集 agent 的返回结果}
-
-### 竞品原始数据（补充参考）
-{Step 1a 竞品收集 agent 的返回结果}
-
-### 用户原始数据（补充参考）
-{Step 1a 用户收集 agent 的返回结果}
-
-请按规范输出 charts/specs.json 的全部内容（含 specs 数组与 chart_gaps 数组）。
-```
-
-收到 specs.json 内容后，编排者执行：
-
-1. 在工作目录创建 `charts/` 并将 specs.json 写入 `charts/specs.json`
-2. 运行图表生成脚本（skill 根目录下执行）：
-   ```
-   ./.venv/Scripts/python.exe scripts/charts/gen_chart.py --spec charts/specs.json --outdir charts
-   ```
-3. 检查脚本输出：退出码 0 且每张 PNG 有字节数；**同时读取脚本输出的 `[WARN]` 行**（布局自动校验：文字重叠/出界/图例遮挡/轴标签重叠）——有 WARN 的图在视觉检查中重点复核
-4. 失败处理：重试 1 次（修正 specs.json 格式问题后重跑）；仍失败 → 记录「图表缺失」原因到交付备注，报告降级为纯文本+表格继续
-
-**前置检查**：若 `.venv` 不存在（首次运行或环境被清理），先执行：
-```
-python -m venv .venv && ./.venv/Scripts/python.exe -m pip install matplotlib pandas numpy
-```
-（pip 安装失败时追加 `-i https://mirrors.aliyun.com/pypi/simple/`）
-
----
-
-## Step 3b-2: 图表视觉检查
-
-读取 `references/chart-inspection.md`，对 `charts/` 下**所有 PNG 逐张**执行视觉质量检查：
-
-1. **程序化校验**：整理 gen_chart.py 输出的 `[WARN]` 行，按条目定位问题图
-2. **视觉检查**：用 Read 工具逐张查看 `charts/*.png`，按 chart-inspection.md 清单过检——
-   - 文字重叠、文本截断、中文乱码（□/豆腐块）
-   - 数值标签与柱高/折线位置相符、负号正常
-   - 图例不遮挡数据、系列 ≤5、分类标签不重叠
-   - 图内数字与 specs.json 一致、颜色可区分
-3. **判定与重绘**：
-   - 🔴 Critical（乱码/遮挡/截断/数值标错/图例盖数据）→ 修改 specs.json 对应条目（缩短分类名、减少系列、调整 figsize/dpi）→ 重跑生成脚本 → 重新视觉检查该图
-   - 每张图最多 2 轮重绘；仍不合格 → 移除该图引用，改为表格/文字表达，记入「图表缺口说明」
-   - 🟡 Warning（可读性小瑕疵）→ 记录即可
-4. **无视觉能力降级**：若编排者模型无法读图（Read 图片不可用），如实记录"视觉检查未执行（模型无视觉能力）"，依赖程序化校验，并在交付摘要注明
-5. 全部通过后进入 Step 3c
-
----
-
-## Step 3c: 图表与报告合并
-
-将图表与 mermaid 块回填进 Step 3-3 组装出的 `report.md`（不放回 parts 分片）：
-
-1. **PNG 图片引用**：按 specs.json 中每张图 `position` 指示的章节位置（正文中该处的占位）替换为**绝对路径引用**（优先指向语义副本 `display_name`，未提供则用内部 filename）：
-   ```
-   ![图N {标题}]({交付目录绝对路径}/charts/{display_name 或 filename})
-   ```
-   图号从 1 开始连续编号（图1、图2…图N），与 specs.json `id`（chart-01…）顺序一致；图片行下方**空一行**后写图名行：`图N {标题}（数据来源：…；样本区间：…）`（学术规范：图名在图下方、图与名之间空行）。
-2. **mermaid 块**：在 `position` 对应章节插入代码块：
-   ````markdown
-   ```mermaid
-   {code}
-   ```
-   ````
-3. **数据不足标注**：specs.json 的 `chart_gaps` 写入报告附录「图表缺口说明」。
-4. **表格名**：检查正文各表——表名在表格上方且表名与表格之间空一行（不符合则补齐）。
-5. 合并完成后，报告正文含全部图引用；**图片编号连续、无重复、无缺号**。
-
-进入审核环节（Step 4a 对图中的关键数字与正文一并核查）。
-
----
-
-## Step 4a: 事实核查（分片抽查制）
-
-报告为 3 万字级分片结构，核查 agent 对**全部分片**执行「关键数据点清单核查 + 章节间一致性检查 + 独立抽样验证」。
-
-读取 `agents/fact-checker.md`，启动事实核查 agent。
-
-prompt 构成：
-```
-[fact-checker.md 内容]
-
----
-
-## 待核查报告（分片路径）
-
-{交付目录}/parts/01-executive-summary.md
-{交付目录}/parts/02-industry-overview.md
-...（8 个分片全部列出，用 Read 读取）
-
-## 知识卡片与原始资料（优先本地验证）
-{交付目录}/knowledge/knowledge-cards.md（卡片含关键数据点与来源）
-{交付目录}/knowledge/sources/（已下载的论文/报告/数据原文，优先 Read 原文交叉验证；无本地文件再联网）
-
-## 核查策略（3 万字报告）
-
-1. 每章提取 3-5 个关键数据点（市场规模/份额/增速/价格/评分等）建立清单，与知识卡片数据点对照
-2. 优先用 knowledge/sources/ 原始文件验证；无本地文件的数据点用独立来源搜索验证（每点至少 1 个不同来源）
-3. 章节间一致性：同一数据在多个分片出现时必须一致（如 2 章市场规模 vs 5 章模型测算）
-4. 抽查至少 3 张图中的关键数字：图内数值与正文/分析结果一致、单位与数据年份标注正确；图数错误按"🔴 错误数据"处理
-5. 输出核查报告：数据点清单表（含状态/来源/处理建议）+ 每章结论 + 🔴错误清单 + 数据可靠性评分
-```
-
-**核查结果判定：**
-
-根据事实核查 agent 的返回结果判断是否需要打回修改：
-
-- 存在 🔴 错误数据 → **必须打回**
-- ❌ 矛盾数据 ≥ 3 条 → **必须打回**
-- 数据可靠性评分 < 6/10 → **必须打回**
-- 其他情况 → 通过，进入 Step 4b
-
-**打回修改流程：**
-
-如需打回，**只重派受影响分片对应的 writer agent**（Step 3-2 单章重写），prompt 中追加：
-```
-## 修改要求（来自事实核查，仅本章）
-
-{事实核查 agent 的修改建议中属于本章的部分}
-
-请逐条修改后重新写入 parts/{对应分片}.md。
-```
-修改完成后重新运行 assemble_report.py（Step 3-3）并同步图表引用（若正文数字变化影响图数据则同步修正 specs 重跑 3b/3b-2/3c）。
-
-最多打回 2 轮。2 轮后仍有问题，记录未解决的问题，继续推进。
-
----
-
-## Step 4b: 质量审核（逐章过检）
-
-报告为分片结构，质量审核 agent **逐章过检**（8 片全查），输出每章 ✅/❌ + 全局项结论。
-
-读取 `agents/quality-reviewer.md`，启动质量审核 agent。
-
-prompt 构成：
-```
-[quality-reviewer.md 内容]
-
----
-
-## 待审核报告（分片路径）
-
-{交付目录}/parts/01-... 至 08-...（8 个分片全部列出，用 Read 读取）
-
-## 审核策略（3 万字报告逐章过检）
-
-1. 每个分片独立过「结构/逻辑/建议/数据规范/表达/图表规范」清单，输出该章 ✅/❌ + 问题
-2. 全局项：章节衔接、图号连续、图表索引表与实际一致、总字数与档位匹配、无跨章重复
-3. 汇总：每章评分 + 全局评分 = 质量评分
-4. 打回时指明**具体分片**与问题条款
-
-## 事实核查结果（参考）
-
-{事实核查 agent 的返回结果}
-
-请按审核清单逐项检查。
-```
-
-**审核结果判定：**
-
-- 质量评分 < 7/10 或明确判定"打回" → 重派对应分片 writer 修改（流程同 Step 4a 打回）
-- 质量评分 ≥ 7/10 且判定"通过" → 进入 Step 4c
-
-打回规则同 Step 4a，最多 2 轮。
-
----
-
-## Step 4c: 联合逻辑审查
-
-读取 `agents/logic-auditor.md`，启动逻辑联合审查 agent，对全报告做**逻辑层面联合检查**（不重复核数据、不查格式，只查自洽性）。
-
-prompt 构成：
-```
-[logic-auditor.md 内容]
-
----
-
-## 本次任务
-
-调研主题：{topic}
-分片路径：{交付目录}/parts/01-08（8 个文件全读）
-组装报告：{交付目录}/report.md
-图表规格：{交付目录}/charts/specs.json
-全文主线：{Step 2 框架 agent 的主线原文}（审查五查中"跨章因果"需核对每章「### 回扣主线」段是否与主线一致）
-
-## 前置结论（参考）
-
-### 事实核查结果
-{Step 4a 输出}
-
-### 质量审核结果
-{Step 4b 输出}
-
-请按五查清单执行联合逻辑审查，输出审查报告。
-```
-
-**判定**：逻辑评分 < 7/10 或判定"打回" → 按审查报告的分片分组建议，重派对应分片 writer 修改（流程同 4a）+ **同步核验相关图表**（数据自洽问题可能影响 specs.json → 重跑 3b/3b-2/3c）；≥ 7/10 → 进入 Step 4d。最多 2 轮。
-
----
-
-## Step 4d: 润色
-
-读取 `agents/polisher.md`，启动润色 agent 对全部分片做语言精修。
-
-prompt 构成：
-```
-[polisher.md 内容]
-
----
-
-## 本次任务
-
-分片路径：{交付目录}/parts/01-08（8 个文件全读，逐个覆盖写入）
-逻辑审查结论：{Step 4c 输出（通过或微调项）}
-
-请按润色清单逐片精修并输出润色清单。
-```
-
-**判定与处理**：
-- 润色完成（返回修改条数与移问题清单）→ 重新运行 assemble_report.py（Step 3-3 重跑：字数/图号校验复验）→ 进入 Step 5
-- 润色 agent 移交的内容性问题（数据/逻辑）→ 回到对应通道（4a 或 4c）处理后再润色
-- 字数明显缩水（超配额下限）→ 回 3-2 对应分片补充
-
----
-
-## Step 5: 交付
-
-### 5.1 本地文件保存
-
-将最终报告、章节分片与图表写入本地交付目录（结构对齐分片写作模式）：
-
-```
-~/Desktop/{today}_{topic_slug}_市场调研报告/
-├── {topic_slug}_市场调研报告_v01.md   # 最终报告（组装 + 图表回填后）
-├── report.md                          # 组装中间件（留档审计）
-├── knowledge/                         # 知识卡片库 + 已下载原始资料（Step 1c）
-│   ├── knowledge-cards.md             # 全部知识卡片（K01…K0n）
-│   └── sources/                       # 下载的论文/报告/数据原文
-├── parts/                             # 8 个章节分片（并行写作产物）
-│   ├── 01-executive-summary.md
-│   ├── ...（02-08）
-├── charts/
-│   ├── chart-01-xxx.png
-│   ├── ...（全部 PNG）
-│   └── specs.json
-```
-
-`topic_slug` 是调研主题的简短中文标识，去掉空格和特殊字符。
-
-如果是经过修改的版本，版本号相应递增（v02、v03）。
-**图表必须先落盘到该目录的 charts/ 子目录**（Step 3b 已生成；若缺失，检查 charts/specs.json 并根据其内容重新生成）。
-
-### 5.2 推送飞书文档
-
-使用 lark-doc skill 将报告推送到飞书文档。
-
-**第一步（写入本地报告）**：将组装校验后的 `report.md`（含图表引用与 mermaid 块）另存为 `{topic_slug}_市场调研报告_v01.md`（与 report.md 同内容，交付目录内保留 parts/ 分片与 report.md 供审计）。
-
-**第二步（创建飞书文档并内嵌图片）**：`cd` 到交付目录执行（lark-cli 的相对路径以 CWD 为基准）：
-
-```
-调用 Skill tool，skill = "lark-doc"
-args = "docs +create --doc-format markdown --title '{topic}市场调研报告' --content @./{topic_slug}_市场调研报告_v01.md"
-```
-
-说明：
-- 本地交付版报告使用**绝对路径**图引用（指向 charts/ 语义副本「图N 标题.png」）；推送前**必须用转换脚本生成飞书推送副本**（自动把绝对路径转为 `@./charts/` 相对路径、含空格/括号的文件名用 `<>` 包裹、校验图片文件存在、统计图片与 mermaid 数量）：
-  ```
-  ./.venv/Scripts/python.exe {skill}/scripts/report/make_feishu_copy.py \
-    --report report.md --charts-dir charts --out {topic_slug}_市场调研报告_飞书版.md
-  ```
-  `--out` 必须位于交付目录内（lark-cli 相对路径以 CWD 为基准）；转换失败（缺图清单）→ 补齐图表后重跑
-- 第二步用副本推送：`--content @./{topic_slug}_市场调研报告_飞书版.md`
-- 推送后**回读验证**：`lark-cli docs +fetch --doc {url} --doc-format markdown` 检查 image 块数量 = 图表数（且出现 whiteboard 块 = mermaid 转画板成功）；数量不符 → 用 `docs +media-insert` 逐张补插缺失图
-- 若 `+create` 整体失败：降级为创建无图文档后用 `docs +media-insert --doc {doc_id} --file @./charts/{语义副本} --align center --caption "图N {标题}"` 逐张在文末追加
-
-### 5.3 输出交付摘要
-
-向用户输出：
-
-```
-## 调研完成
-
-**主题**：{topic}
-**报告文件**：{本地目录路径}（{总字数} 字，{8} 章分片）
-**飞书文档**：{飞书文档链接}
-**全文主线**：{主线一句话}
-
-### 执行摘要
-{报告的执行摘要章节}
-
-### 图表清单
-- 总数：{N} 张（PNG {X} + mermaid {Y}，满足 {depth} 档位配额）
-- 类型分布：{折线/环形/雷达/…}
-- 视觉检查：{全部通过 / 修正 X 张后通过 / X 张降级（原因）}
-{如有图表缺口，列出}
-
-### 知识卡片
-- 卡片总数：{N} 张（K01-K0n，覆盖全部资料来源）
-- 已下载原文：{X} 份（{交付目录}/knowledge/sources/；未下载项已注明原因）
-- 消费情况：writer 引用 {x} 张 / 核查对照 {y} 张
-
-### 数据质量
-- 总字数：{X} 字（目标 {档位区间}）
-- 事实核查评分：{评分}/10（分片抽查 + 章节一致性）
-- 质量审核评分：{评分}/10（逐章过检 + 图表规范）
-- 联合逻辑审查评分：{评分}/10（数据自洽/结论支撑/因果链/术语）
-- 润色：{X} 处修改（{术语/衔接/精炼/格式}）
-- 修改轮次：{轮次}
-{如有未解决的问题，列出}
-
-### 工作流执行记录
-- 数据收集：行业 ✅ / 竞品 ✅ / 用户 ✅
-- 数据分析：行业 ✅ / 竞品 ✅ / 用户 ✅
-- 框架搭建：✅
-- 框架审核：✅（{通过/修改1轮后通过}）
-- 报告撰写：✅（8 分片并行，{X} 字，组装校验 {通过/补写X片}）
-- 图表生成：✅（{N} 张，{通过/缺失说明}）
-- 事实核查：✅（{通过/修改X轮后通过}）
-- 质量审核：✅（{通过/修改X轮后通过}）
-- 联合逻辑审查：✅（{通过/修改X轮后通过}）
-- 润色：✅（{X} 处修改）
-- 飞书交付：✅
-```
-
----
-
-## 通用重试策略与状态跟踪
-
-### 重试判定
-
-| 信号 | 判定 | 处理 |
-|------|------|------|
-| subagent 返回为空 / 未按要求写文件 / 明确失败标记 | ⚠️ 失败 | 重试（见下） |
-| 返回内容明显不完整（如收集数据点 <3 / 分片字数 <50% 配额） | ⚠️ 失败 | 重试（见下） |
-| 脚本非 0 退出 / 校验不通过（组装/图表） | ⚠️ 失败 | 修正输入后重跑 |
-| 审核判定"打回" | 正常流程 | 走对应打回（这是质量轮次，不计入重试） |
-
-### 重试分级（任何环节通用）
-
-1. **第一级：原样重试**——相同 prompt 重发 1 次（消除瞬时故障/模型偶发）
-2. **第二级：策略重试**——调整后重发 1 次：任务拆细 / 补充上下文 / 换表述 / 换备用 agent（如该章节 writer 连续失败 → 换另一案例章节 agent 或编排者直接撰写该片）
-3. **第三级：降级**——如实标注"该环节未完成+原因"，记录到 .workflow.json 与交付摘要，流程继续
-
-每环节重试总上限 **2 级（即最多 2 次重发）**，防止死循环。审核打回轮次按各 Step 的轮次上限（2 轮）独立管理，不占重试额度。
-
-### 重试矩阵（按环节）
-
-| 环节 | 失败常见原因 | 第二级处理（第一级为原样重试） |
-|------|------------|------------------------------|
-| 1a/1b 收集/分析 | 搜索失败/数据不足 | 换搜索词与来源组合；标注"数据不足"继续 |
-| 3-2 分片 writer | 字数不足/未落盘 | 补上下文（更完整数据片段）重派；仍失败编排者撰写该片 |
-| 3-3 组装 | 缺片/字数/图号 | 按校验报告定向补写后重跑脚本 |
-| 3b 图表生成 | specs 格式/图型错误 | 修 specs 后重跑；仍失败降级纯文本 |
-| 3b-2 视觉检查 | 图打不开/模型无视觉 | 走程序校验；记录"视觉检查未执行" |
-| 3c 合并 | 位置错位 | 重读 specs.position 后重新回填 |
-| 4a/4b/4c 审核 | agent 失败 | 重试；失败则标注该审缺位，进入下一审 |
-| 4d 润色 | 覆盖写失败 | 重试；失败则仅交付组装产物并标注 |
-| 5 飞书推送 | 网络/权限 | 重试 1 次 → 降级本地交付 + 手动提示 |
-
-### 状态跟踪（.workflow.json）
-
-编排者在交付目录维护 `./.workflow.json`（幂等与断点续跑）：
-
-```json
-{
-  "topic": "调研主题",
-  "depth": "standard",
-  "steps": {
-    "1a_collect":    {"status": "done", "retries": 0},
-    "1c_knowledge":  {"status": "done", "retries": 0, "cards": 18, "downloaded": 7},
-    "1b_analyze":    {"status": "done", "retries": 0},
-    "2_framework":   {"status": "done", "retries": 0},
-    "2b_fw_review":  {"status": "done", "retries": 0, "rounds": 1},
-    "3_parts":       {"status": "done", "retries": 1},
-    "3b_charts":     {"status": "done", "retries": 0},
-    "3b2_inspect":   {"status": "done", "retries": 0},
-    "3c_merge":      {"status": "done", "retries": 0},
-    "4a_fact":       {"status": "done", "retries": 0, "rounds": 2},
-    "4b_quality":    {"status": "done", "retries": 0, "rounds": 1},
-    "4c_logic":      {"status": "done", "retries": 0, "rounds": 1},
-    "4d_polish":     {"status": "done", "retries": 0},
-    "5_deliver":     {"status": "done", "retries": 0}
-  },
-  "word_count": 32650,
-  "charts": {"png": 6, "mermaid": 1, "degraded": []},
-  "issues": ["分片03第一轮字数不足已补写"]
-}
-```
-
-- 每个 step 完成/失败后更新对应条目（status: done/failed/degraded + retries 计数）
-- 会话中断后续跑：读取 .workflow.json，status!=done 的步骤从该处继续（产物已落盘的步骤跳过）
-- 用户在交付摘要可查看 retries/rounds 全过程质量轨迹
-
----
-
-## 异常处理
-
-### Agent 执行失败
-如果某个 subagent 执行失败或返回为空：
-- 重试一次
-- 仍然失败 → 标注该环节缺失，继续推进
-- 在交付摘要中说明哪个环节未完成
-
-### 用户中途干预
-如果用户在执行过程中发消息：
-- 如果是补充信息 → 纳入后续 agent 的 prompt
-- 如果是修改方向 → 从当前步骤重新开始
-- 如果是终止 → 输出已完成的内容
-
-### 图表生成失败
-如果 Step 3b 图表生成失败（脚本报错 / venv 缺失 / 图片无效）：
-- venv 缺失 → 先执行环境初始化（`python -m venv .venv` + pip 安装，失败用阿里云镜像）
-- 脚本报错 → 根据完整堆栈修正 `charts/specs.json` 后重试一次
-- 仍失败 → 报告降级为纯文本+表格继续（图引用删除），在交付摘要注意栏和图表清单中注明"图表缺失 + 原因"
-- 飞书图表无法内嵌 → 本地报告保留图片引用，飞书侧降级 `+media-insert` 或提示手动粘贴
-
-### 分片写作/组装失败
-- 某分片 writer 失败或返回为空 → 重试该章一次；仍失败 → 用另一章节 agent 补写该片或编排者直接撰写该片，并在交付摘要标注
-- 组装校验不通过（缺片/字数不足/图号断号）→ 只处理校验报告指出的项：补写分片、或重派对应 writer 扩充字数、修正图引用后重跑 assemble_report.py
-- 字数长期无法达标 → 允许追加一轮"扩充轮"：8 个 writer 按配额缺口同步补充各章（每章 +2000 字上限），重跑组装
-
-### 视觉检查降级
-- 模型无视觉能力或有图打不开 → 记录"视觉检查未执行（原因）"，依赖程序化校验继续
-- 重绘 2 轮后仍不合格的图 → 从报告移除该图引用（改为表格/文字），记入「图表缺口说明」
-
-### 飞书推送失败
-如果飞书文档推送失败：
-- 确保本地文件已保存
-- 告知用户本地文件位置
-- 提示用户可以手动复制到飞书
-
----
-
-## 约束
-
-- 编排者不直接做调研或写报告，所有实际工作由 subagent 完成
-- 不跳过任何步骤，特别是框架审核、事实核查和质量审核
-- 不在 agent 之间传递时修改原始数据
-- 每个 agent 的 prompt 必须包含完整上下文，因为 agent 之间没有共享记忆
-- 收集 agent 只收集数据，分析 agent 只分析数据，职责不混
-- 分析 agent 不搜索新数据，只基于收集 agent 提供的数据工作
-- 事实核查 agent 必须独立搜索验证，这是审核含金量的核心
+必须汇报：本地报告路径、飞书 URL、正文净字数、8 片状态、证据/卡片/下载数量、图表数量及视觉检查结果、事实/质量/逻辑/润色结果、重试和打回轮次、未解决缺口。报告正文不暴露这些内部流程字段。
