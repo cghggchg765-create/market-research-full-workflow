@@ -30,15 +30,15 @@ Step 1a 证据采集（3 collector 并行）
 Step 1b 数据分析（3 analyzer 并行）＋ Step 1c 知识固化（1 curator 并行）
    ↓ [WAIT] 4/4 返回；analysis/*.md、knowledge-cards、source-ledger 全部落盘
 Step 2 判断主线与框架（judgment-spine.md + framework.md）
-   ↓ [WAIT] 主线与框架冻结，审核通过
+   ↓ [WAIT] 主线与框架冻结
 Step 2b 框架审核
-   ↓ [WAIT] framework-review.md 生成
+   ↓ [WAIT] framework-review.md 生成且判定通过
 Step 3 八片写作（8 writer 并行）∥ 3b 图表编码（visualizer 逐图写绘图代码并运行，只读分析+框架+台账）
    ↓ [WAIT] 8/8 分片落盘且单片校验通过；chart-manifest + PNG 就绪（≥5）
-Step 3-3 组装（assemble_report.py --spec → output/report.md，一次注入图表索引）
-   ↓ [WAIT] 组装门禁通过；PNG/mermaid 已生成并视觉检查通过
-Step 3-2 图文审阅（漂移/重复标题/图文对应；Agent 编辑修复）→ 3c 图表回填
-   ↓ [WAIT] 图号连续、检查记录落盘
+Step 3-2 组装（assemble_report.py --spec → output/report.md，一次注入图表索引）
+   ↓ [WAIT] 组装门禁通过（字数/图号/索引/引用/语法）
+Step 3-3 图文审阅（漂移/重复标题/图文对应；Agent 编辑修复）→ 3c 图表回填
+   ↓ [WAIT] 漂移/重复标题检查通过；inspection.json 落盘；回填编辑后重新组装并 validate exit 0（后续评审与交付对象=最新 report.md）
 Step 4a 事实核查 ∥ Step 4b 质量审核（两审并行，各自落盘）
    ↓ [WAIT] fact-check.md 与 quality-review.md 均生成
 Step 4c 联合逻辑审查（依赖 fact 结论）
@@ -78,12 +78,12 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 - 创建标准目录结构（inputs/evidence/analysis/parts/charts/reviews/output/logs/scripts）；
 - 创建**任务级虚拟环境** `{run_dir}/.venv`（Windows: `.venv/Scripts/python.exe`；安装 matplotlib/pandas/numpy，失败切阿里云镜像）；**绝不复用 skill 安装目录的 .venv**；
-- 只把**检查登记脚本**复制到 `{run_dir}/scripts/charts/`（render_visual_check.py）；gen_chart.py 保留在 skill 内仅作字体/布局工具**参考**——正式图表一律由 Agent 按数据手写代码（{run_dir}/scripts/charts/fig_*.py），**不复制、不调用固定生成器**；
+- 把**审计与检查登记脚本**复制到 `{run_dir}/scripts/charts/`（figlib_audit.py、render_visual_check.py）；gen_chart.py 保留在 skill 内仅作字体/布局工具**参考**——正式图表一律由 Agent 按数据手写代码（{run_dir}/scripts/charts/fig_*.py，同目录 import figlib_audit 做 bbox 审计），**不复制、不调用固定生成器**；
 - 输出运行时信息 JSON（task_python 绝对路径、Python 版本、脚本副本清单）。
 
-目录结构（`{run_dir}/` 内，与此前目录树一致，另含 `scripts/charts/`、`{run_dir}/delivery.json`）。使用 `scripts/report/workflow_state.py` 原子更新 `.workflow.json`（--state {run_dir}/.workflow.json）：记录每阶段 status/retries/rounds、输入输出路径、文件哈希、run_dir/task_python/path_source。中断后先读状态，跳过产物完整且校验通过的阶段，从最近失败阶段恢复。
+目录结构（`{run_dir}/` 内，与此前目录树一致，另含 `scripts/charts/`、`{run_dir}/delivery.json`）。使用 `scripts/report/workflow_state.py` 原子更新 `.workflow.json`（`--state {run_dir}/.workflow.json --step {阶段} --status done [--retries n] [--artifact {路径}]`）：记录每阶段 status/retries/artifact/value 与更新时间；`--show` 查看全量。中断后先读状态：产物存在且重新运行对应阶段校验通过 → 跳过该阶段；产物缺失或校验失败 → 从该阶段恢复。
 
-{skill_root} = skill 安装目录（源码与参考文件位置）；{run_dir} = 本次任务产物位置；{task_python} = {run_dir}/.venv/Scripts/python.exe。三者不可混用：脚本从 {skill_root} 或 {run_dir}/scripts 取，产物只进 {run_dir}，绘图/交付一律用 {task_python} 并以 {run_dir} 为 CWD。
+{python} = 运行 report 脚本与一键交付的解释器（report 脚本仅用标准库，编排环境 python 即可）；{skill_root} = skill 安装目录（源码与参考文件位置）；{run_dir} = 本次任务产物位置；{task_python} = {run_dir}/.venv/Scripts/python.exe（图表运行与审计专用）。四者不可混用：脚本从 {skill_root}/scripts 或 {run_dir}/scripts 取，产物只进 {run_dir}；图表运行/审计用 {task_python}，report 脚本与一键交付用 {python}，均以 {run_dir} 为 CWD。
 
 ## 3.5 阶段同步与进入门槛（必须先等齐再推进）
 
@@ -105,9 +105,9 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 | 2 框架 + 主线 | framework | 3 份分析落盘；知识卡片就绪；行业结构类型确定 | `analysis/framework.md` 与 `analysis/judgment-spine.md` 存在且包含主线/三情景/T 信号 |
 | 2b 框架审核 | framework-reviewer | 框架与主线冻结 | `analysis/framework-review.md` 落盘且含评分/通过判定 |
 | 3 八片写作 ∥ 3b 图表编码 | 8 writer + 1 chart-coder 并行 | 主线冻结；框架冻结；章节规划表生成（图号预分配）；知识卡片/台账就绪；task venv 就绪 | 8/8 `parts/*.md` 校验通过；`charts/chart-manifest.json` + PNG（≥5）生成、脚本落 `{run_dir}/scripts/charts/` |
-| 3-3 组装（带 spec） | 编排者 | 8 片与 specs 均就绪；PNG 已生成 | `report.md` 生成；字数/图号/索引/引用/语法门禁全过 |
-| 3-2 图文审阅 + 3c 回填 | 审阅 Agent + 编排 Agent 编辑 | 组装通过；PNG 存在 | 漂移/重复标题/图文对应检查通过；`charts/inspection.json` 落盘、正文图引用完整 |
-| 4a 事实核查 ∥ 4b 质量审核 | fact-checker ∥ quality-reviewer（并行） | 报告与图表稳定（两者互不依赖输出） | `reviews/fact-check.md`、`reviews/quality-review.md` 均落盘 |
+| 3-2 组装（带 spec） | 编排者 | 8 片与 specs 均就绪；PNG 已生成 | `report.md` 生成；字数/图号/索引/引用/语法门禁全过 |
+| 3-3 图文审阅 + 3c 回填 | 审阅 Agent + 编排 Agent 编辑 | 组装通过；PNG 存在 | 漂移/重复标题/图文对应检查通过；`charts/inspection.json` 落盘；回填编辑后**重新组装并 validate exit 0** |
+| 4a 事实核查 ∥ 4b 质量审核 | fact-checker ∥ quality-reviewer（并行） | 3-3 回填后的重新组装通过（评审对象为最新 `report.md`；两者互不依赖输出） | `reviews/fact-check.md`、`reviews/quality-review.md` 均落盘 |
 | 4c 联合逻辑审查 | logic-auditor | 4a/4b 均完成 | `reviews/logic-review.md` 落盘且判定通过 |
 | 4d 润色 | polisher | 4c 通过 | `reviews/polish-report.md` 落盘；润色后必须重新组装并 validate exit 0 |
 | 5 交付 | 编排者 | 最终门禁全部通过 | `scripts/report/validate_report.py` exit 0；`report.feishu.md` 生成；飞书回读通过（可与交付摘要并行） |
@@ -161,9 +161,9 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 编排者随后执行：
 
-1. `scripts/report/evidence_ledger.py` 校验台账合法性。
-2. `scripts/report/card_index.py --cards knowledge-cards.md --ledger source-ledger.jsonl --out card-index.json` 生成卡片索引（供按章节拆解）。
-3. `scripts/report/download_sources.py` 下载公开、合法、无需绕过访问控制的论文 PDF、官方报告、CSV/XLSX 到 `evidence/sources/`（**并发下载、单文件 ≤50MB、超时 15s、失败重试一次**），记录 SHA-256/字节数；失败、登录、付费或反爬资料保留卡片并写明原因，不伪造文件。**该步骤是后台任务：启动后不阻塞 Step 2/3，只需在 4a 前完成。**
+1. `{python} {skill_root}/scripts/report/evidence_ledger.py --ledger {run_dir}/evidence/source-ledger.jsonl` 校验台账合法性。
+2. `{python} {skill_root}/scripts/report/card_index.py --cards {run_dir}/evidence/knowledge-cards.md --ledger {run_dir}/evidence/source-ledger.jsonl --out {run_dir}/evidence/card-index.json` 生成卡片索引（供按章节拆解）。
+3. `{python} {skill_root}/scripts/report/download_sources.py --manifest {run_dir}/evidence/download-manifest.json --outdir {run_dir}/evidence/sources --result {run_dir}/evidence/download-results.json [--timeout 30]` 下载公开、合法、无需绕过访问控制的论文 PDF、官方报告、CSV/XLSX 到 `evidence/sources/`（**并发下载、单文件 ≤50MB、默认超时 30s、失败重试一次**），记录 SHA-256/字节数；失败、登录、付费或反爬资料保留卡片并写明原因，不伪造文件。**该步骤是后台任务：启动后不阻塞 Step 2/3，只需在 4a 前完成。**
 
 知识卡片的文件路径统一是 `evidence/knowledge-cards.md`，禁止在同一运行目录另建 `knowledge/` 平行目录。
 
@@ -204,7 +204,7 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 1. 编排者用 `scripts/report/card_index.py` 按章节生成**证据注入包**：
    ```text
-   {skill_python} scripts/report/card_index.py --cards {run_dir}/evidence/knowledge-cards.md \
+   {python} {skill_root}/scripts/report/card_index.py --cards {run_dir}/evidence/knowledge-cards.md \
      --ledger {run_dir}/evidence/source-ledger.jsonl \
      --out {run_dir}/evidence/card-index.json --chapter "{章节名}"
    ```
@@ -213,7 +213,7 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 3. 每个 Writer 收到：绝对分片路径、本章配额、全文主线、全局大纲、本章证据注入包、章节 Kxx、**本章图号区间**、证据台账摘要、术语表，以及**「本章关键数据点（内嵌必用）」**——编排者把注入包中该章每张卡片的「关键数据点 + 解读策略 + 使用建议 + 反证与边界」原文直接粘贴进 Writer prompt，**不是只给文件路径**。Writer 必须把至少 80% 的论点建立在粘贴的数据点上并写入正文数值；**每个引用的数据点须配一句解读（数据意味着什么、与哪个指标印证、决策含义）**，有局限的卡片顺带说明边界；缺证据写入待核问题。
 4. **单片即时校验（写作完成即执行）**：每个 Writer 落盘后，编排者立即运行
    ```text
-   {skill_python} scripts/report/validate_report.py --stage part --file {run_dir}/parts/{分片}.md
+   {python} {skill_root}/scripts/report/validate_report.py --stage part --file {run_dir}/parts/{分片}.md
    ```
    校验不过（标签句式/数字小节/禁则/清单化/非 canonical 命名）→ 打回该 Writer 修改，**不得进入组装**；8/8 通过后才运行组装。
 5. 编排者检查 8 片 UTF-8/文件名/mtime/字数/章节职责，并核对 `charts/chart-manifest.json` 图号与规划表预分配一致；任一未就绪不得进入组装。
@@ -229,6 +229,7 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 - 产出 `{run_dir}/charts/图N_标题.png`（≥5 张，standard 6-8，deep 8-12）与图表清单 `{run_dir}/charts/chart-manifest.json`（图号/标题/position/PNG 文件名/script/card_ids/source/unit）；
 - 数据必须来自注入包卡片，PNG 内不渲染主标题，来源以小字标注在图内底部；
 - 完成后运行 `render_visual_check.py` 登记 `{run_dir}/charts/inspection.json` 初始状态。
+- **代码级审计**：每个 fig 脚本尾部接入 `from figlib_audit import audit; audit(fig, "图N …")`；渲染后用 `figlib_audit.py audit --script …` 逐脚本检查（`[FAIL]` 必须修复）；运行模型无视觉能力时按 `references/chart-inspection.md` §6 强制替代流程执行（audit + pixel + contact 拼版 + 人工清单），如实记录、不假装通过。
 
 **审阅与修复（用 Agent 编辑，不用修复脚本）**：编排者用视觉能力逐张查看 PNG 与其在正文中的位置，重点检查——图片是否位于 position 对应章节（图片漂移）、图名行是否唯一（无重复标题）、图与前后文字是否对应、有无截断/乱码/遮挡。发现问题 → 派编辑 Agent 直接修改对应分片或绘图脚本并重跑；**禁止用脚本批量改写正文/分片**。
 
@@ -261,14 +262,14 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 ## 11. 飞书交付（受硬门禁保护的唯一交付通道）
 
-本地版 `output/report.local.md` 保留绝对图片路径；运行 `scripts/report/make_feishu_copy.py` 生成 `output/report.feishu.md`，自动校验图文件并把绝对路径转换为 `@./charts/`，中文/空格/括号路径使用尖括号。
+本地版即 `output/report.md`（绝对图片路径，图片与正文同盘）；运行 `scripts/report/make_feishu_copy.py` 生成 `output/report.feishu.md`，自动校验图文件并把绝对路径转换为 `@./charts/`，含空格或括号的路径使用尖括号（display_name 以「图N 」开头必然命中）。
 
 **一键交付（唯一交付通道，禁止散装跳步）：**
 
 交付 = 运行单个脚本，串行完成全部前置清单，任一项失败立即中止并退出非 0，**不执行 lark-cli**：
 
 ```text
-{skill_python} {skill_root}/scripts/report/deliver.py \
+{python} {skill_root}/scripts/report/deliver.py \
   --run-dir {run_dir} --target-words {target} --title "{报告标题}" [--dry-run]
 ```
 
@@ -276,7 +277,7 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 1. 8 片单片校验（`validate_report.py --stage part`）——不过即中止；
 2. 生成/校验 `evidence/card-index.json`（缺则用 `card_index.py` 补生成）；
-3. 图表产物校验：`charts/chart-manifest.json` 存在、PNG ≥5、PNG 文件齐全（manifest 与磁盘一一对应）；**`charts/inspection.json` 必须存在**（视觉检查未落盘 → 中止）；
+3. 图表产物校验：`charts/chart-manifest.json` 存在、PNG ≥5、PNG 文件齐全（manifest 与磁盘一一对应）；**视觉门禁：`charts/inspection.json` 存在且 `visual_status=passed`（或 `degraded` 且 `notes` 记录原因）**——仅登记未确认（pending）→ 中止；
 4. `assemble_report.py` 组装（带 `--spec`，注入图表索引 + 图号门禁）；
 5. `validate_report.py --stage final` 整篇校验（含图表硬门禁）；
 6. `make_feishu_copy.py` 生成飞书副本；

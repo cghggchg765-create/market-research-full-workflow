@@ -13,6 +13,7 @@ from pathlib import Path
 
 from chart_manifest import load_state, png_file_name, png_items
 from forbidden_rules import check_figure_table_support, check_forbidden, labelled_list_ratio
+from inspection_gate import gate_check
 from validate_report import PARTS, SECTIONS, validate_part_file, count_words
 
 
@@ -57,8 +58,9 @@ def audit(run_dir: Path, target_words: int) -> dict:
                 missing.append(name)
         if missing:
             report["issues"].append(f"PNG 文件缺失: {missing}")
-    if not (run_dir / "charts" / "inspection.json").is_file():
-        report["issues"].append("缺少 charts/inspection.json（视觉检查未落盘）")
+    vis_ok, vis_msg = gate_check(run_dir)
+    if not vis_ok:
+        report["issues"].append(vis_msg)
 
     report_md = run_dir / "output" / "report.md"
     if report_md.is_file():
@@ -110,7 +112,7 @@ def main() -> int:
         print("  ✗ " + issue)
     if "cohesion" in result:
         print(f"[audit] 协同提示：{result['cohesion']}")
-    return 0
+    return 1 if result["issues"] else 0
 
 
 if __name__ == "__main__":

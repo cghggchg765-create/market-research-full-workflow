@@ -36,7 +36,7 @@
 
 ```text
 parts/
-├── 01-executive-summary.md          # 摘要/关键词/核心观点/可视化索引
+├── 01-executive-summary.md          # 摘要/关键词/核心观点（可视化索引由 assemble_report.py 自动注入，勿手写）
 ├── 02-industry-definition-scale.md   # 板块一
 ├── 03-structure-competition.md       # 板块二
 ├── 04-user-insight.md                # 板块三

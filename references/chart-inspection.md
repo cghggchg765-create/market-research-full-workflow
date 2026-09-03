@@ -9,7 +9,7 @@ Step 3b 生成完成后
    ↓
 ① 程序化校验：运行每个 `scripts/charts/fig_*.py`，读取其布局自检输出（bbox 重叠/出界/图例/轴标签的 [WARN] 行）；退出码非 0 = FAIL；基于 `gen_chart.py` 工具函数编写的脚本，其自检行同样读取
    ↓
-② 视觉检查：用 Read 工具逐张查看 charts/*.png，按下方清单过检
+② 视觉检查：用 Read 工具逐张查看 charts/*.png，按下方清单过检；若 Read 返回“模型不支持图像输入”→ 执行第 6 节强制替代流程
    ↓
 ③ 汇总问题 → 有 Critical 问题 → 重绘（最多 2 轮）→ 仍不合格 → 该图降级并在图表缺口说明记录
 ```
@@ -64,5 +64,20 @@ Step 3b 生成完成后
 
 - 程序化校验是**辅助**：它只能抓 bbox 级问题（重叠/出界/截断类），抓不到画风/对比度/语义错误——必须叠加视觉检查
 - 视觉检查策略（提速不降质）：**程序 WARN 图必检 + 每类图型首张必检 + 其余按 30% 抽样**；也可拆 2 个子 agent 各检查一半，检查结论合并写入 `charts/inspection.json`
-- 若当前模型无法读图（无视觉能力）：跳过视觉检查并如实记录"视觉检查未执行（模型无视觉能力）"，依赖程序化校验 + 交付摘要注明
-- mermaid 块不在此检查范围（呈现代码块，由 lark-doc 在飞书端渲染；语法问题在 Step 4b 质量审核的 mermaid 合法项检查）
+- 若当前模型无法读图（无视觉能力）：**执行第 6 节强制替代流程**，如实记录 `visual_capability: "unavailable"`；不得把“未执行”写成“通过”
+- mermaid 块不在此检查范围（呈现代码块，由 lark-doc 在飞书端渲染；语法问题在质量审核的 mermaid 合法项检查）
+
+## 6. 模型无视觉能力时的强制替代流程（不允许假装通过）
+
+当编排者/检查模型**无法读取图片**（读图被拒、无视觉输入）时，视觉检查降级为下面四步。任何一步都不得跳过，不得把“未执行”写成“通过”：
+
+1. **如实声明**：登记 inspection.json 时写入根字段 `visual_capability: "unavailable"`——`render_visual_check.py --charts-dir … --spec … --out {run_dir}/charts/inspection.json --visual-status pending --capability unavailable`；交付摘要注明“视觉检查=PENDING（人工）”。（schema：根 `checked_at/visual_status/visual_capability/notes`，`charts[]` 每图 `id/file/exists/bytes/status/note`；人工核验可在 charts[] 条目增补 `manual_check`/`checklist`，门禁只认根 `visual_status`。）
+2. **代码级 bbox 审计**（正式工具 `scripts/charts/figlib_audit.py`）：
+   - 每个 fig 脚本在 savefig 后调用 `from figlib_audit import audit; audit(fig, "图N …")`；
+   - 对每个 fig 脚本逐次运行（按实际文件名）：`{task_python} {skill_root}/scripts/charts/figlib_audit.py audit --script {run_dir}/scripts/charts/fig_01_xxx.py`；
+   - 输出含 `[FAIL]`（文本/图例/刻度越出画布）→ 修改脚本重跑（每图 ≤2 轮）；`[WARN]`（相邻刻度重叠）记录并优先人工复核。
+3. **像素健全性**：`{task_python} {skill_root}/scripts/charts/figlib_audit.py pixel --dir {run_dir}/charts --glob "图*.png"`——非空白、非纯白、尺寸正常；FAIL 视为生成异常需重跑。
+4. **拼版图 + 人工检查清单**：`… figlib_audit.py contact --dir {run_dir}/charts --out {run_dir}/charts/_contact_sheet.png`；
+   为每张图在 inspection.json 的 charts[] 条目增补 `manual_check: "PENDING"` 与 checklist（预期图题、关键数值、来源、图号、所在章节），由人工对照拼版图/原图逐张确认后，把根 `visual_status` 改为 `passed`（或 `degraded` 并写 notes）；人工未确认前，报告不得宣称“视觉检查通过”。
+
+数值侧兜底：脚本数据必须来自注入包卡片并在头部注释 `# 来源卡片: Kxx (SRC-xxx)`；关键数字可在脚本内断言，与台账口径一致——捕获“画得出来但数值错”一类问题。画风/对比度/语义类问题只能由人工或视觉模型完成。

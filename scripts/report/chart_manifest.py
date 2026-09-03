@@ -47,9 +47,14 @@ def load_items(run_dir: Path) -> list[dict]:
     path = resolve_spec(run_dir)
     if path is None:
         return []
+    return load_items_at(path)
+
+
+def load_items_at(path: Path) -> list[dict]:
+    """按给定清单文件路径读取条目（供 assemble 等已知路径的调用方）；异常返回 []。"""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, OSError):
         return []
     items = payload.get("specs", payload) if isinstance(payload, dict) else payload
     return items if isinstance(items, list) else []

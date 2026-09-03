@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from chart_manifest import load_state, png_file_name, png_items
+from inspection_gate import gate_check
 
 SCRIPTS = Path(__file__).resolve().parent
 PY = sys.executable
@@ -46,8 +47,6 @@ def main() -> int:
 
     # 1) 8 片单片校验
     parts = run_dir / "parts"
-    for name in sorted(x.name for x in parts.glob("*.md")) if parts.is_dir() else []:
-        pass
     part_ok = True
     if parts.is_dir():
         for f in sorted(parts.glob("*.md")):
@@ -91,9 +90,11 @@ def main() -> int:
     if missing_png:
         return 1 if not step(f"PNG 文件齐全（缺 {missing_png}）", False) else 1
     step(f"图表产物校验（{len(png)} 张 PNG，清单 {spec_path.name}）", True)
-    if not (run_dir / "charts" / "inspection.json").is_file():
-        print("[deliver] ❌ 缺少 charts/inspection.json：视觉检查必须执行并落盘后才可交付")
+    vis_ok, vis_msg = gate_check(run_dir)
+    if not vis_ok:
+        print(f"[deliver] ❌ {vis_msg}")
         return 1
+    step(f"视觉检查门禁：{vis_msg}", True)
 
     # 4) 组装（带清单，注入图表索引 + 图号门禁）
     if not run("assemble_report.py", "--parts-dir", str(parts), "--out",

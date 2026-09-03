@@ -65,7 +65,7 @@
 生产分片固定为（与章节 token 一一对应）：
 
 ```
-01-executive-summary.md           # 摘要/核心观点/可视化索引
+01-executive-summary.md           # 摘要/核心观点（可视化索引由 assemble_report.py 自动注入，勿手写）
 02-industry-definition-scale.md   # 一、行业定义、规模测算与历史坐标
 03-structure-competition.md       # 二、行业结构、产业链与竞争格局
 04-user-insight.md                # 三、用户需求与行为洞察

@@ -74,19 +74,20 @@ curl -L --max-time 30 -o "{交付目录}/evidence/sources/K01_主题.pdf" "{url}
 
 ## 拆解与分发（卡片索引）
 
-- 合并后由 `scripts/report/card_index.py` 生成 `evidence/card-index.json`（每卡片：id/type/source/year/metric_keys/chapter_hint/downloaded/supports_claim）。
-- 章节规划（Step 3-1）把索引按 `chapter_hint` 拆分，把对应卡片区间分配给对应 Writer；Writer 只消费本域卡片。
-- visualizer 每个数据系列绑定 `card_id` + `metric_key`；fact-checker 用 `metric_key` 做跨章节一致性和源值核对。
-- `card_index.py --chapter "四、核心驱动力、制约因素与政策环境"` 可输出该章相关卡片片段，供 Writer 直接嵌入上下文。
+- 合并后由 `scripts/report/card_index.py` 生成 `evidence/card-index.json`（每卡片实际键：id/title/type/source/year/metric_key/source_id/local_file/supports_claim/interpretation/usage_note/limitation/key_points/data_points/raw/chapter_hint/chapter_hints——与脚本输出一致，勿按旧字段名读取）。`raw` 为整卡原文，`data_points`/`key_points` 为多行要点原文；编排者注入 Writer 提示词时直接粘贴这些原文，不只给文件路径。
+- 章节规划（Step 3 开工前）用 `chapter_hints`（多章节数组）把卡片路由到各章：同一卡关联多章时每章各得一份注入，不丢失。
+- visualizer 每个数据系列绑定 `card_id` + `source_id`（manifest 条目字段，口径/单位/基期随卡）；`metric_key` 为跨章同名指标辅助索引（供审核核对同指标口径，非 manifest 门禁字段）。
+- fact-checker / logic-auditor 以台账与卡片口径核对跨章一致性：`metric_key` 相同的条目口径应一致，不一致需在 reviews 中说明。
+- `card_index.py --chapter "四、核心驱动力、制约因素与政策环境"` 可输出该章相关卡片片段（cards.{slug}.md），供 Writer 直接嵌入上下文。
 
 ## 联动（卡片被谁消费）
 
 | 环节 | 如何使用 |
 |------|---------|
-| Step 3-1 规划表 | 每章主用数据标注对应卡片 id（Kxx） |
-| Step 3-2 writer | 写作时按需 Read evidence/knowledge-cards.md，并从 evidence/source-ledger.jsonl 取关键数据点、（来源机构，年份）标注与参考文献条目 |
+| Step 3 章节规划 | 每章主用数据标注对应卡片 id（Kxx）；`card_index.py --chapter` 按 `chapter_hints` 路由注入 |
+| Step 3 writer | 写作时按需 Read evidence/knowledge-cards.md，并从 evidence/source-ledger.jsonl 取关键数据点、（来源机构，年份）标注与参考文献条目 |
 | Step 4a 核查 | 优先用 evidence/sources/ 原始文件（Read PDF/CSV）交叉验证卡片数据点；无本地文件才联网验证 |
-| Step 3b visualizer | specs 的 card_id/source_id/source/definition/base_period 挂接证据，图数据与卡片一致 |
+| Step 3b visualizer | chart-manifest 条目的 card_id/source_id/source/definition/base_period 挂接证据，图数据与卡片一致 |
 | Step 4c 逻辑审查 | 术语/数据口径以卡片为准核对 |
 | 参考文献 | GB/T 7714 条目由卡片字段直接生成（作者/机构. 标题. 出版者/媒体, 年份. URL） |
 

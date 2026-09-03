@@ -26,7 +26,7 @@
 4. **生成证据台账**：写 `{run_dir}/evidence/source-ledger.jsonl`。每行必填：source_id、card_id、title、author_or_org、year、url、source_level（A/B/C）、source_value、unit、definition、base_period；正文用途、验证状态、lane/tier 为可选项。字段与 `scripts/report/evidence_ledger.py` 校验一致。
 5. **生成下载清单**：写 `{run_dir}/evidence/download-manifest.json`，只列公开、合法、可下载的论文 PDF/官方报告/CSV/XLSX；需登录、付费或反爬资料写入 `gaps.md` 并说明原因。
 6. **生成缺口汇总**：写 `{run_dir}/evidence/gaps.md`，聚焦收集报告已标注的缺口，不无中生有。
-7. **校验**：运行 `scripts/report/evidence_ledger.py` 检查台账合法性；运行 `scripts/report/card_index.py` 生成 `{run_dir}/evidence/card-index.json`。
+7. **校验**：运行 `{python} {skill_root}/scripts/report/evidence_ledger.py --ledger {run_dir}/evidence/source-ledger.jsonl` 检查台账合法性；运行 `{python} {skill_root}/scripts/report/card_index.py --cards {run_dir}/evidence/knowledge-cards.md --ledger {run_dir}/evidence/source-ledger.jsonl --out {run_dir}/evidence/card-index.json` 生成卡片索引。
 
 ## 约束
 

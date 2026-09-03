@@ -68,7 +68,6 @@
 ├── charts/inspection.json
 ├── reviews/
 ├── output/report.md
-├── output/report.local.md
 ├── output/report.feishu.md
 └── logs/
 ```
@@ -99,6 +98,7 @@
 scripts/
 ├── charts/
 │   ├── gen_chart.py            # 模板参考/兜底渲染器（8 类图 + 布局预检，AI 编码不强制）
+│   ├── figlib_audit.py         # bbox/像素/拼版审计（模型无视觉能力时的强制替代检查）
 │   ├── render_visual_check.py  # 登记图表检查状态清单
 │   └── pack_skill.py           # dist 重打包
 └── report/
@@ -123,7 +123,7 @@ scripts/
 **任务自带虚拟环境**（不复用本仓库 .venv）：编排者解析任务目录后运行
 
 ```text
-{skill_python} {skill_root}/scripts/report/prepare_run.py --run-dir {run_dir}
+{python} {skill_root}/scripts/report/prepare_run.py --run-dir {run_dir}
 ```
 
 脚本幂等完成：目录结构 → 创建 `{run_dir}/.venv`（Windows: `.venv/Scripts/python.exe`）→ 安装 matplotlib/pandas/numpy（官方源失败自动切阿里云镜像）→ 复制绘图脚本到 `{run_dir}/scripts/charts/`。

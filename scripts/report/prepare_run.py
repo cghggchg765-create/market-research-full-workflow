@@ -5,8 +5,8 @@
 在已解析的 run_dir 内完成运行时准备（幂等）：
 - 目录结构
 - {run_dir}/.venv（Windows: .venv/Scripts/python.exe），不复用 skill 安装目录的 .venv
-- 只把「检查登记」辅助脚本复制到 {run_dir}/scripts/charts/（render_visual_check.py）；
-  gen_chart.py 保留在 skill 内仅作字体/布局工具参考——正式图表一律由 AI 按数据手写代码，不复制固定生成器
+- 把「审计 + 检查登记」辅助脚本复制到 {run_dir}/scripts/charts/（figlib_audit.py、render_visual_check.py）：
+  fig_*.py 在同目录 import figlib_audit 做 bbox 审计；gen_chart.py 保留在 skill 内仅作字体/布局工具参考——正式图表一律由 AI 按数据手写代码，不复制固定生成器
 - 把运行时信息写回 stdout（JSON）
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ import venv
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent.parent  # scripts/report -> skill root
-CHART_HELPERS = ("render_visual_check.py",)
+CHART_HELPERS = ("figlib_audit.py", "render_visual_check.py")
 REQUIRED_PKGS = ("matplotlib", "pandas", "numpy")
 MIRROR = "https://mirrors.aliyun.com/pypi/simple/"
 

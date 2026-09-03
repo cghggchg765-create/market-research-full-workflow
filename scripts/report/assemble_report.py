@@ -11,7 +11,7 @@ import re
 import tempfile
 from pathlib import Path
 
-from chart_manifest import resolve_spec
+from chart_manifest import load_items_at, resolve_spec
 from forbidden_rules import check_forbidden, labelled_list_ratio
 
 PARTS = (
@@ -36,6 +36,16 @@ def read_text(path: Path) -> str:
 
 def word_count(text: str) -> int:
     return len(re.findall(r"[\u4e00-\u9fff]", text)) + len(re.findall(r"[A-Za-z0-9]+", text))
+
+
+INDEX_SECTION_RE = re.compile(r"## 可视化图表索引\n.*?(?=\n## )", re.S)
+
+
+def body_net_text(text: str) -> str:
+    """正文净字数口径：剔除「可视化图表索引」节与「## 参考文献」起的内容（与 validate_report 同口径）。"""
+    text = INDEX_SECTION_RE.sub("", text)
+    cut = text.find("## 参考文献")
+    return text if cut < 0 else text[:cut]
 
 
 def atomic_write(path: Path, text: str) -> None:
@@ -69,7 +79,7 @@ def check_part_structure(contents: list[tuple[str, str]]) -> list[str]:
         if "**" in text and re.search(r"\*\*[^*：]{1,30}\*\*：", text):
             issues.append(f"[格式] {name} 存在“加粗关键词+冒号”句式")
         if re.search(r"^\s*\*\s+", text, re.MULTILINE):
-            issues.append(f"[格式] {name} 使用星号无序列表，应改为短横线")
+            issues.append(f"[格式] {name} 使用星号无序列表，应改为有序 `1.`/`①` 或自然段")
         if re.search(r"^\s*【(?:事实|推断|结论|备注|数据)】", text, re.MULTILINE):
             issues.append(f"[格式] {name} 含内部标签词，应改为自然表述")
     return issues
@@ -107,18 +117,20 @@ def check_citations(texts: list[tuple[str, str]]) -> list[str]:
     return issues
 
 
-def check_figures(texts: list[tuple[str, str]], spec_path: Path | None) -> tuple[list[str], list[dict]]:
+def _png_entries(items: list[dict]) -> list[dict]:
+    # 图号只分配给 PNG：mermaid 以代码块呈现，不占图号
+    return [item for item in items if item.get("type") != "mermaid"]
+
+
+def check_figures(texts: list[tuple[str, str]], spec_items: list[dict] | None) -> tuple[list[str], list[dict]]:
     issues: list[str] = []
     refs: list[int] = []
     for _, text in texts:
         refs.extend(int(x) for x in FIGURE_RE.findall(text))
-    if spec_path and spec_path.exists():
-        payload = json.loads(spec_path.read_text(encoding="utf-8"))
-        specs = payload.get("specs", payload) if isinstance(payload, dict) else payload
-        # 图号只分配给 PNG：mermaid 以代码块呈现，不占图号
-        expected = list(range(1, sum(1 for item in specs if item.get("type") != "mermaid") + 1))
+    if spec_items is not None:
+        expected = list(range(1, len(_png_entries(spec_items)) + 1))
         if sorted(set(refs)) != expected:
-            issues.append(f"[图表] 正文图号 {sorted(set(refs))} 与规格 PNG 图号 {expected} 不一致")
+            issues.append(f"[图表] 正文图号 {sorted(set(refs))} 与清单 PNG 图号 {expected} 不一致")
     if refs:
         missing = [i for i in range(1, max(refs) + 1) if i not in refs]
         if missing:
@@ -126,16 +138,12 @@ def check_figures(texts: list[tuple[str, str]], spec_path: Path | None) -> tuple
     return issues, [{"figure": n} for n in refs]
 
 
-def chart_index(spec_path: Path | None) -> str:
-    if not spec_path or not spec_path.exists():
+def chart_index(spec_items: list[dict] | None) -> str:
+    if not spec_items:
         return ""
-    payload = json.loads(spec_path.read_text(encoding="utf-8"))
-    specs = payload.get("specs", payload) if isinstance(payload, dict) else payload
     rows = ["## 可视化图表索引", "", "| 图号 | 图表名称 | 对应章节 | 交付文件 |", "|---|---|---|---|"]
     png_no = 0
-    for item in specs:
-        if item.get("type") == "mermaid":
-            continue  # 流程类图不占图号，避免索引表与正文学号不一致（幽灵图号）
+    for item in _png_entries(spec_items):
         png_no += 1
         name = item.get("display_name") or item.get("filename", "")
         rows.append(f"| 图{png_no} | {item.get('title', '')} | {item.get('position', '')} | {name} |")
@@ -149,25 +157,31 @@ def assemble(parts_dir: Path, out: Path, target_words: int, spec: Path | None) -
     if missing:
         print("[assemble] 缺少分片: " + ", ".join(missing))
         return 1
+    spec_items: list[dict] | None = None
     if spec is None:
         # 未显式传 --spec 时，按 {run_dir}/parts 约定从上级目录探测图表清单
         spec = resolve_spec(parts_dir.parent)
+    if spec is not None and spec.is_file():
+        spec_items = load_items_at(spec)
+        if not spec_items:
+            print("  ✗ [图表] 清单文件为空或非法 JSON: " + spec.name)
+            return 1
     contents = [(name, read_text(parts_dir / name).strip()) for name in PARTS]
     issues = check_part_structure(contents) + check_markdown(contents) + check_citations(contents)
-    figure_issues, refs = check_figures(contents, spec)
+    figure_issues, refs = check_figures(contents, spec_items)
     issues.extend(figure_issues)
     body = "\n\n".join(text for _, text in contents) + "\n"
-    index = chart_index(spec)
+    index = chart_index(spec_items)
     if index:
         first, rest = contents[0][1], "\n\n".join(text for _, text in contents[1:])
         body = first + "\n\n" + index + "\n" + rest + "\n"
     issues.extend(f"图文配套：{msg}" for msg in check_figure_table_support(body))
-    count = word_count(body)
-    if count < int(target_words * (1 - TOLERANCE)):
-        issues.append(f"[字数] {count} < 下限 {int(target_words * (1 - TOLERANCE))}")
+    net = word_count(body_net_text(body))
+    if net < int(target_words * (1 - TOLERANCE)):
+        issues.append(f"[字数] 正文净字数 {net} < 下限 {int(target_words * (1 - TOLERANCE))}")
     atomic_write(out, body)
     print("[assemble] 分片字数：" + ", ".join(f"{n}={word_count(t)}" for n, t in contents))
-    print(f"[assemble] 正文净字数={count}，目标={target_words}，图表引用={len(refs)}")
+    print(f"[assemble] 正文净字数={net}，目标={target_words}，图表引用={len(refs)}")
     if issues:
         for issue in issues:
             print("  ✗ " + issue)

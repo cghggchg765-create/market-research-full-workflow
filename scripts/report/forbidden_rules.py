@@ -38,7 +38,7 @@ def check_forbidden(text: str) -> list[str]:
     if DASH_STAR_BULLET.search(prose):
         issues.append("正文出现行首 `-`/`*`/`•` 项目列表：正文一律禁用这些项目编号，要点改用有序 `1.`/`①` 或自然段")
     if BULLET_DOT.search(text):
-        issues.append("项目编号使用圆点 `•`，应改为短横线 `-` 或规范有序列表")
+        issues.append("项目编号使用圆点 `•`，应改为有序 `1.`/`①` 或自然段（正文禁用一切 `-`/`*`/`•` 项目编号）")
     if TAG_BRACKET.search(text):
         issues.append("存在【事实】【推断】等方括号内部标签词")
     if BOLD_KEYWORD.search(text):
@@ -50,7 +50,7 @@ def check_forbidden(text: str) -> list[str]:
     if NUMERIC_SECTION.search(text):
         issues.append("小节标题使用阿拉伯数字编号（`### 1.1`），应使用中文序号 `### （一）`")
     if FAKE_HEADING.search(text):
-        issues.append("正文出现伪标题编号（非标题以 `1.1 文字`/`（一）文字`/`一、文字` 开头），编号只允许存在于 Markdown 标题内；正文列表用 `-` 或 `1. 动作`")
+        issues.append("正文出现伪标题编号（非标题以 `1.1 文字`/`（一）文字`/`一、文字` 开头），编号只允许存在于 Markdown 标题内；正文如需列表用有序 `1.`/`①`，优先改写为自然段")
     fences = text.count("```")
     if fences % 2:
         issues.append("代码块围栏 ``` 未闭合")

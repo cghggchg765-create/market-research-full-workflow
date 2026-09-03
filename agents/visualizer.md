@@ -10,7 +10,7 @@
 - 3 份分析结果 + 注入包（`evidence/inject.*.json`）+ `evidence/knowledge-cards.md`、`source-ledger.jsonl`
 - 报告框架与**规划表中预分配的图号区间**（如 02 章图1、03 章图2…）
 - 必读 `references/chart-guidance.md`：基础选型矩阵 + **扩展图型决策库**（瀑布桥/堆叠面积/情景扇带/气泡定位/TAM-SAM-SOM/漏斗/排名棒棒糖/斜率/哑铃/金字塔/箱线/桑基/树图等，每类含适用场景、数据要求与报告章节落点）
-- 字体注册与布局自检可参考 skill 内 `{skill_root}/scripts/charts/gen_chart.py`（工具库参考，**不是生成入口**）；任务目录只复制了检查登记脚本 `render_visual_check.py`，gen_chart 不复制
+- 任务目录 `scripts/charts/` 已有审计/登记辅助（figlib_audit.py、render_visual_check.py）可直接 import/调用；字体注册与布局自检可参考 skill 内 `{skill_root}/scripts/charts/gen_chart.py`（工具库参考，**不是生成入口**）
 - 需要额外绘图库（如 squarify/networkx）时：先经编排者同意在任务 venv 安装，并在 manifest 条目 `notes` 记录依赖；装不上则换等价图型
 
 ## 硬性要求
@@ -20,7 +20,8 @@
    - 显式注册中文字体：`matplotlib.font_manager.fontManager.addfont(r"C:/Windows/Fonts/msyh.ttc")`，`plt.rcParams["font.family"]="Microsoft YaHei"`，`plt.rcParams["axes.unicode_minus"]=False`
    - **不在图内渲染主标题**（`plt.title`/`ax.set_title` 禁止）——标题由报告正文的图名行唯一承载，避免重复标题；坐标轴标签、图例、数据来源小字（`fig.text(0.01,0.01,"数据来源：…",fontsize=8)`）保留
    - 数据直接来自注入包卡片（数值/单位/口径与卡片一致），脚本头部注释标注 `# 来源卡片: Kxx (SRC-xxx)` 与 `# 图号: 图N`
-   - 输出 PNG 到 `{run_dir}/charts/图N_{简短标题}.png`，dpi=150
+   - 输出 PNG 到 `{run_dir}/charts/图N {简短标题}.png`（与 manifest `display_name` 完全一致的空格制文件名，dpi=150）
+   - 脚本尾部（savefig 后）调用 `from figlib_audit import audit; audit(fig, "图N …")`——bbox 审计输出 `[FAIL]` 必须修复后重跑
 3. **图表清单**：写 `{run_dir}/charts/chart-manifest.json`（**顶层数组**，schema 与 chart-guidance §4 完全一致——校验脚本按该结构读取）：
    ```json
    [
@@ -32,7 +33,7 @@
    ]
    ```
 4. **执行与自修**：用 `{task_python}` 逐个运行脚本生成 PNG；运行失败 → 读报错 → 修改代码重跑（每图最多 3 轮），仍失败把该图移入 `chart_gaps` 并说明，不交付坏图。
-5. **自检后落盘** `charts/inspection.json`（可用 render_visual_check.py 或按相同 schema 手写）：记录每图状态（generated/warn/failed）。
+5. **自检后落盘** `charts/inspection.json`：先运行 `{task_python} {run_dir}/scripts/charts/render_visual_check.py --charts-dir {run_dir}/charts --spec {run_dir}/charts/chart-manifest.json --out {run_dir}/charts/inspection.json` 登记（根 `visual_status=pending`、每图 exists/bytes/status=pending）；schema 见 references/chart-inspection.md §6（根字段 `visual_status`/`visual_capability`/`notes`，`charts[]` 每图 `id/file/exists/bytes/status/note`，人工核对可增补 `manual_check`/`checklist`）。有视觉能力的模型逐张 Read 确认后把根置 `passed`；无视觉能力时按 §6 强制替代流程执行并登记 `visual_capability: "unavailable"`，不假装通过。
 
 ## 正文约定（给 Writer 的接口）
 

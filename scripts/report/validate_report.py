@@ -9,8 +9,9 @@ import re
 import sys
 from pathlib import Path
 
-from chart_manifest import load_state, png_items
+from chart_manifest import load_state, png_file_name, png_items
 from forbidden_rules import check_figure_table_support, check_forbidden, labelled_list_ratio
+from inspection_gate import gate_check
 
 PARTS = (
     "01-executive-summary.md", "02-industry-definition-scale.md", "03-structure-competition.md",
@@ -32,6 +33,19 @@ SECTIONS = (
 
 def count_words(text: str) -> int:
     return len(re.findall(r"[\u4e00-\u9fff]", text)) + len(re.findall(r"[A-Za-z0-9]+", text))
+
+
+INDEX_SECTION_RE = re.compile(r"## 可视化图表索引\n.*?(?=\n## )", re.S)
+
+
+def body_net_text(text: str) -> str:
+    """正文净字数口径：剔除「可视化图表索引」节与「## 参考文献」起的内容。
+
+    参考文献、免责声明与原始资料不计入正文净字数（SKILL §7）；字数门禁统一用此口径。
+    """
+    text = INDEX_SECTION_RE.sub("", text)
+    cut = text.find("## 参考文献")
+    return text if cut < 0 else text[:cut]
 
 
 def check_part(name: str, text: str) -> list[str]:
@@ -88,8 +102,9 @@ def validate(run_dir: Path, target_words: int) -> list[str]:
     for section in SECTIONS:
         if section not in text:
             issues.append(f"缺少标准章节: {section}")
-    if count_words(text) < int(target_words * 0.88):
-        issues.append(f"正文净字数不足: {count_words(text)} < {int(target_words * 0.88)}")
+    net_words = count_words(body_net_text(text))
+    if net_words < int(target_words * 0.88):
+        issues.append(f"正文净字数不足: {net_words} < {int(target_words * 0.88)}")
     if text.count("### 回扣主线") < 5:
         issues.append("主体板块回扣主线数量不足")
     if text.count("资料来源：") < 5:
@@ -104,16 +119,20 @@ def validate(run_dir: Path, target_words: int) -> list[str]:
     # 图文配套门禁：图名行/表名行/资料来源行/引导句
     issues.extend(f"图文配套：{msg}" for msg in check_figure_table_support(text))
 
-    # 图表产物硬门禁：正文必须实际引用图表，且清单（manifest/specs）/视觉检查记录齐全
+    # 图表产物硬门禁：正文必须实际引用图表，且清单与磁盘 PNG 一一对应、视觉检查已确认
     spec_path, spec_ok, spec_err = load_state(run_dir)
     if spec_path is None:
         issues.append("缺少 charts/chart-manifest.json（或旧 charts/specs.json）：可视化产物缺失")
     elif not spec_ok:
         issues.append(spec_err)
     else:
-        png_count = len(png_items(run_dir))
-        if png_count < 5:
-            issues.append(f"PNG 图表不足 5 张，当前 {png_count} 张")
+        png = png_items(run_dir)
+        if len(png) < 5:
+            issues.append(f"PNG 图表不足 5 张，当前 {len(png)} 张")
+        missing = [png_file_name(i) for i in png
+                   if not (run_dir / "charts" / png_file_name(i)).is_file()]
+        if missing:
+            issues.append(f"manifest 声明但磁盘缺失的 PNG: {missing}")
     if "## 可视化图表索引" not in text:
         issues.append("最终报告缺少「可视化图表索引」节")
     figure_refs = re.findall(r"!\[图(\d+)", text)
@@ -122,8 +141,13 @@ def validate(run_dir: Path, target_words: int) -> list[str]:
         missing = [i for i in range(1, nums[-1] + 1) if i not in nums]
         if missing:
             issues.append(f"正文图号缺失: {missing}（当前图号 {nums}）")
-    if not run_dir.joinpath("charts", "inspection.json").is_file():
-        issues.append("缺少 charts/inspection.json（图表视觉检查未执行）")
+    vis_ok, vis_msg = gate_check(run_dir)
+    if not vis_ok:
+        issues.append(vis_msg)
+    for rel in ("reviews/fact-check.md", "reviews/quality-review.md",
+                "reviews/logic-review.md", "reviews/polish-report.md"):
+        if not (run_dir / rel).is_file():
+            issues.append(f"缺少审核落盘产物: {rel}")
 
     ledger = run_dir / "evidence" / "source-ledger.jsonl"
     if ledger.is_file():
