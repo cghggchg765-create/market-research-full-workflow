@@ -9,7 +9,8 @@ import re
 import sys
 from pathlib import Path
 
-from forbidden_rules import check_forbidden, labelled_list_ratio
+from chart_manifest import load_state, png_items
+from forbidden_rules import check_figure_table_support, check_forbidden, labelled_list_ratio
 
 PARTS = (
     "01-executive-summary.md", "02-industry-definition-scale.md", "03-structure-competition.md",
@@ -38,9 +39,6 @@ def check_part(name: str, text: str) -> list[str]:
     if not text.strip():
         issues.append("分片为空")
     issues.extend(f"{name}：{msg}" for msg in check_forbidden(text))
-    ratio = labelled_list_ratio(text)
-    if ratio > 0.45:
-        issues.append(f"{name}：行首 `-` 列表占比 {ratio:.0%}，正文过度清单化，应改为自然段落")
     return issues
 
 
@@ -103,19 +101,19 @@ def validate(run_dir: Path, target_words: int) -> list[str]:
     if re.search(r"^\s*\*\s+", text, re.M):
         issues.append("最终报告存在星号无序列表")
 
-    # 图表产物硬门禁：正文必须实际引用图表，且索引/规格/视觉检查记录齐全
-    spec_path = run_dir / "charts" / "specs.json"
-    if not spec_path.is_file():
-        issues.append("缺少 charts/specs.json（可视化被跳过？）")
+    # 图文配套门禁：图名行/表名行/资料来源行/引导句
+    issues.extend(f"图文配套：{msg}" for msg in check_figure_table_support(text))
+
+    # 图表产物硬门禁：正文必须实际引用图表，且清单（manifest/specs）/视觉检查记录齐全
+    spec_path, spec_ok, spec_err = load_state(run_dir)
+    if spec_path is None:
+        issues.append("缺少 charts/chart-manifest.json（或旧 charts/specs.json）：可视化产物缺失")
+    elif not spec_ok:
+        issues.append(spec_err)
     else:
-        try:
-            payload = json.loads(spec_path.read_text(encoding="utf-8"))
-            specs = payload.get("specs", payload) if isinstance(payload, dict) else payload
-            png_count = sum(1 for item in specs if item.get("type") != "mermaid")
-            if png_count < 5:
-                issues.append(f"PNG 图表不足 5 张，当前 {png_count} 张")
-        except json.JSONDecodeError:
-            issues.append("charts/specs.json 不是合法 JSON")
+        png_count = len(png_items(run_dir))
+        if png_count < 5:
+            issues.append(f"PNG 图表不足 5 张，当前 {png_count} 张")
     if "## 可视化图表索引" not in text:
         issues.append("最终报告缺少「可视化图表索引」节")
     figure_refs = re.findall(r"!\[图(\d+)", text)

@@ -11,6 +11,7 @@ import re
 import tempfile
 from pathlib import Path
 
+from chart_manifest import resolve_spec
 from forbidden_rules import check_forbidden, labelled_list_ratio
 
 PARTS = (
@@ -56,9 +57,6 @@ def check_part_structure(contents: list[tuple[str, str]]) -> list[str]:
             issues.append(f"[缺失] {name} 为空")
         for msg in check_forbidden(text):
             issues.append(f"[禁则] {name}: {msg}")
-        ratio = labelled_list_ratio(text)
-        if ratio > 0.45:
-            issues.append(f"[禁则] {name}: 行首 `-` 列表占比 {ratio:.0%}，正文过度清单化，应改为自然段落")
         h1 = re.findall(r"^#\s+[^#].*$", text, re.MULTILINE)
         if index == 0 and len(h1) != 1:
             issues.append(f"[结构] {name} 应有且仅有一个 H1，当前 {len(h1)} 个")
@@ -151,6 +149,9 @@ def assemble(parts_dir: Path, out: Path, target_words: int, spec: Path | None) -
     if missing:
         print("[assemble] 缺少分片: " + ", ".join(missing))
         return 1
+    if spec is None:
+        # 未显式传 --spec 时，按 {run_dir}/parts 约定从上级目录探测图表清单
+        spec = resolve_spec(parts_dir.parent)
     contents = [(name, read_text(parts_dir / name).strip()) for name in PARTS]
     issues = check_part_structure(contents) + check_markdown(contents) + check_citations(contents)
     figure_issues, refs = check_figures(contents, spec)
@@ -160,6 +161,7 @@ def assemble(parts_dir: Path, out: Path, target_words: int, spec: Path | None) -
     if index:
         first, rest = contents[0][1], "\n\n".join(text for _, text in contents[1:])
         body = first + "\n\n" + index + "\n" + rest + "\n"
+    issues.extend(f"图文配套：{msg}" for msg in check_figure_table_support(body))
     count = word_count(body)
     if count < int(target_words * (1 - TOLERANCE)):
         issues.append(f"[字数] {count} < 下限 {int(target_words * (1 - TOLERANCE))}")

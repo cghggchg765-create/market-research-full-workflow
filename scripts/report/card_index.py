@@ -76,6 +76,9 @@ def build_index(cards: list[dict]) -> list[dict]:
             "source_id": c.get("source_id", ""),
             "local_file": local_file_field(c),
             "supports_claim": c.get("supports_claim", ""),
+            "interpretation": c.get("解读策略", c.get("interpretation", "")),
+            "usage_note": c.get("使用建议", c.get("usage_note", "")),
+            "limitation": c.get("反证与边界", c.get("limitation", "")),
             "chapter_hint": chapter_token(c.get("章节关联", ""), c.get("title", "")),
         }
         for c in cards

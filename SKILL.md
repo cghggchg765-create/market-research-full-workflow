@@ -33,12 +33,11 @@ Step 2 判断主线与框架（judgment-spine.md + framework.md）
    ↓ [WAIT] 主线与框架冻结，审核通过
 Step 2b 框架审核
    ↓ [WAIT] framework-review.md 生成
-Step 3 八片写作（8 writer 并行，写入 parts/）
-   ∥ 同步启动 3b 图表规划（visualizer → specs.json，只读分析+框架+台账，不依赖正文；写作与图表并行）
-   ↓ [WAIT] 8/8 分片落盘且单片校验通过；specs 证据字段齐全
+Step 3 八片写作（8 writer 并行）∥ 3b 图表编码（visualizer 逐图写绘图代码并运行，只读分析+框架+台账）
+   ↓ [WAIT] 8/8 分片落盘且单片校验通过；chart-manifest + PNG 就绪（≥5）
 Step 3-3 组装（assemble_report.py --spec → output/report.md，一次注入图表索引）
    ↓ [WAIT] 组装门禁通过；PNG/mermaid 已生成并视觉检查通过
-Step 3-2 图表视觉检查（WARN 图必检+分片抽查）→ 3c 图表回填
+Step 3-2 图文审阅（漂移/重复标题/图文对应；Agent 编辑修复）→ 3c 图表回填
    ↓ [WAIT] 图号连续、检查记录落盘
 Step 4a 事实核查 ∥ Step 4b 质量审核（两审并行，各自落盘）
    ↓ [WAIT] fact-check.md 与 quality-review.md 均生成
@@ -59,62 +58,32 @@ Step 5 交付（make_feishu_copy → 上传回读，与交付摘要并行推进�
 
 以下任务不触发本流程：单公司、单日涨跌、单一财报、单一宏观事件、一句话科普、翻译。若路由不通过，简要说明应使用其他场景，不强行生成长报告。
 
-## 3. 运行目录与状态
+## 3. 运行目录、任务虚拟环境与状态（任务文件夹优先，禁止默认 Desktop）
 
-每次任务建立独立运行目录，不把多个任务混到同一 `parts/` 或 `charts/`：
+**run_dir 解析（在任何 mkdir/Write/绘图/交付之前必须完成）**，优先级从高到低：
+
+1. 用户在本次对话中显式指定的任务文件夹（最优先，原样使用）；
+2. 宿主明确标记为当前任务工作区的目录；
+3. 当前工作目录——仅当其已是任务工作区（含 `inputs/`、`parts/`、`evidence/` 或 `.workflow.json`）；
+4. 都无法确定 → **停下来询问用户指定文件夹**；不得按模板默认创建 `C:/Users/.../Desktop/...`。
+
+解析与准备命令（幂等，先跑这两步再开始任何产出）：
 
 ```text
-C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
-├── .workflow.json
-├── inputs/request.md
-├── inputs/routing.json
-├── evidence/collection-plan.industry.md
-├── evidence/collection-plan.competitor.md
-├── evidence/collection-plan.user.md
-├── evidence/collection-report.industry.md
-├── evidence/collection-report.competitor.md
-├── evidence/collection-report.user.md
-├── evidence/knowledge-cards.industry.md
-├── evidence/knowledge-cards.competitor.md
-├── evidence/knowledge-cards.user.md
-├── evidence/source-ledger.jsonl
-├── evidence/evidence-summary.json
-├── evidence/knowledge-cards.md
-├── evidence/card-index.json
-├── evidence/inject.{02..08}.json
-├── evidence/cards.{02..08}.md
-├── evidence/download-manifest.json
-├── evidence/download-results.json
-├── evidence/gaps.md
-├── evidence/sources/
-├── analysis/industry.md
-├── analysis/competitor.md
-├── analysis/user.md
-├── analysis/judgment-spine.md
-├── analysis/framework.md
-├── analysis/framework-review.md
-├── parts/01-executive-summary.md
-├── parts/02-industry-definition-scale.md
-├── parts/03-structure-competition.md
-├── parts/04-user-insight.md
-├── parts/05-drivers-policy.md
-├── parts/06-trends-opportunities.md
-├── parts/07-commercialization-roadmap.md
-├── parts/08-risk-conclusion-references.md
-├── charts/specs.json
-├── charts/*.png
-├── charts/inspection.json
-├── reviews/fact-check.md
-├── reviews/quality-review.md
-├── reviews/logic-review.md
-├── reviews/polish-report.md
-├── output/report.md
-├── output/report.local.md
-├── output/report.feishu.md
-└── logs/
+{python} {skill_root}/scripts/report/resolve_run_dir.py [--run-dir {用户任务文件夹}]
+{python} {skill_root}/scripts/report/prepare_run.py --run-dir {run_dir}
 ```
 
-使用 `scripts/report/workflow_state.py` 原子更新 `.workflow.json`。状态至少包括每阶段 `status`、`retries`、`rounds`、输入/输出路径、文件哈希和错误原因。中断后先读状态，跳过产物完整且校验通过的阶段，从最近失败阶段恢复。
+`prepare_run.py` 在 `{run_dir}` 内完成（幂等）：
+
+- 创建标准目录结构（inputs/evidence/analysis/parts/charts/reviews/output/logs/scripts）；
+- 创建**任务级虚拟环境** `{run_dir}/.venv`（Windows: `.venv/Scripts/python.exe`；安装 matplotlib/pandas/numpy，失败切阿里云镜像）；**绝不复用 skill 安装目录的 .venv**；
+- 只把**检查登记脚本**复制到 `{run_dir}/scripts/charts/`（render_visual_check.py）；gen_chart.py 保留在 skill 内仅作字体/布局工具**参考**——正式图表一律由 Agent 按数据手写代码（{run_dir}/scripts/charts/fig_*.py），**不复制、不调用固定生成器**；
+- 输出运行时信息 JSON（task_python 绝对路径、Python 版本、脚本副本清单）。
+
+目录结构（`{run_dir}/` 内，与此前目录树一致，另含 `scripts/charts/`、`{run_dir}/delivery.json`）。使用 `scripts/report/workflow_state.py` 原子更新 `.workflow.json`（--state {run_dir}/.workflow.json）：记录每阶段 status/retries/rounds、输入输出路径、文件哈希、run_dir/task_python/path_source。中断后先读状态，跳过产物完整且校验通过的阶段，从最近失败阶段恢复。
+
+{skill_root} = skill 安装目录（源码与参考文件位置）；{run_dir} = 本次任务产物位置；{task_python} = {run_dir}/.venv/Scripts/python.exe。三者不可混用：脚本从 {skill_root} 或 {run_dir}/scripts 取，产物只进 {run_dir}，绘图/交付一律用 {task_python} 并以 {run_dir} 为 CWD。
 
 ## 3.5 阶段同步与进入门槛（必须先等齐再推进）
 
@@ -135,9 +104,9 @@ C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
 | 1b 分析 + 1c 知识固化 | 3 analyzer + 1 curator 并行 | 1a 的 3 份结果全部落盘；source-ledger 初稿可读 | 4/4 返回；`analysis/industry.md`、`analysis/competitor.md`、`analysis/user.md`、`evidence/knowledge-cards.md`、`evidence/source-ledger.jsonl` 存在且非空 |
 | 2 框架 + 主线 | framework | 3 份分析落盘；知识卡片就绪；行业结构类型确定 | `analysis/framework.md` 与 `analysis/judgment-spine.md` 存在且包含主线/三情景/T 信号 |
 | 2b 框架审核 | framework-reviewer | 框架与主线冻结 | `analysis/framework-review.md` 落盘且含评分/通过判定 |
-| 3 八片写作 ∥ 3b 图表规划 | 8 writer + 1 visualizer 并行 | 主线冻结；框架冻结；章节规划表生成；知识卡片/台账就绪 | 8/8 `parts/*.md` 存在、非空、UTF-8、单片校验通过、字数达标；`charts/specs.json` 生成且每图含 8 证据字段 |
+| 3 八片写作 ∥ 3b 图表编码 | 8 writer + 1 chart-coder 并行 | 主线冻结；框架冻结；章节规划表生成（图号预分配）；知识卡片/台账就绪；task venv 就绪 | 8/8 `parts/*.md` 校验通过；`charts/chart-manifest.json` + PNG（≥5）生成、脚本落 `{run_dir}/scripts/charts/` |
 | 3-3 组装（带 spec） | 编排者 | 8 片与 specs 均就绪；PNG 已生成 | `report.md` 生成；字数/图号/索引/引用/语法门禁全过 |
-| 3-2 图表视觉检查 + 3c 回填 | 编排者（可按题材分片并行） | 组装通过；PNG 存在 | 图号连续、`charts/inspection.json` 落盘、正文图引用完整 |
+| 3-2 图文审阅 + 3c 回填 | 审阅 Agent + 编排 Agent 编辑 | 组装通过；PNG 存在 | 漂移/重复标题/图文对应检查通过；`charts/inspection.json` 落盘、正文图引用完整 |
 | 4a 事实核查 ∥ 4b 质量审核 | fact-checker ∥ quality-reviewer（并行） | 报告与图表稳定（两者互不依赖输出） | `reviews/fact-check.md`、`reviews/quality-review.md` 均落盘 |
 | 4c 联合逻辑审查 | logic-auditor | 4a/4b 均完成 | `reviews/logic-review.md` 落盘且判定通过 |
 | 4d 润色 | polisher | 4c 通过 | `reviews/polish-report.md` 落盘；润色后必须重新组装并 validate exit 0 |
@@ -180,7 +149,7 @@ C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
 3. **分域知识卡片就地产出**：搜索完成后立即把关键证据整理为 `knowledge-cards.{domain}.md`（domain=industry/competitor/user），不经过主 Agent 转述，避免知识遗漏。
 4. **分域证据盘点报告**：写 `collection-report.{domain}.md`，含问题对照、来源 A/B/C 汇总、关键冲突、数据缺口和建议支撑章节。
 
-核心维度（规模、增速、格局、价格、盈利、政策、需求）各至少两条独立证据；政策至少五条；建议来源不少于十八条。缺数据写入各自盘点报告的缺口部分，不得用常识补齐。
+核心维度（规模、增速、格局、价格、盈利、政策、需求）各至少两条独立证据；政策至少五条；总来源 18-25 条、单域卡片 ≤15 张。**覆盖度停机 + 证据饱和即停 + 时间盒（单域 ≤30 分钟价值量）**，防止过度收集：每问题 2 条独立证据即覆盖，连续 2 问题无新增即收尾，缺口写入盘点报告而不是继续加搜。缺数据不得用常识补齐。
 
 ### 5.2 分域卡片合并归一与原始资料
 
@@ -240,31 +209,28 @@ C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
      --out {run_dir}/evidence/card-index.json --chapter "{章节名}"
    ```
    产出 `evidence/inject.{02|03|…}.json`（本章卡片 + 台账行）与 `evidence/cards.{02|03|…}.md`（卡片片段）。
-2. **图号预分配**列入章节规划表：每章分配连续图号（如 02 章图1、03 章图2、04 章图3…），visualizer 按规划表生成 specs（每图 `id=chart-NN`、`display_name=图N …`），Writer 按同一张表写占位 `![图N 标题]({run_dir}/charts/待定.png)`。
-3. 每个 Writer 收到：绝对分片路径、本章配额、全文主线、全局大纲、本章证据注入包、章节 Kxx、**本章图号区间**、证据台账摘要、术语表，以及**「本章关键数据点（内嵌必用）」**——编排者把注入包中该章每张卡片的关键数据点原文（数值+单位+口径+年份）直接粘贴进 Writer prompt，**不是只给文件路径**。Writer 必须把至少 80% 的论点建立在粘贴的数据点上并写入正文数值；缺证据写入待核问题。
+2. **图号预分配**列入章节规划表：每章分配连续图号（如 02 章图1、03 章图2、04 章图3…），visualizer 按规划表逐图编写代码（每图 `id=chart-NN`、`display_name=图N …`，见第 8 节），Writer 按同一张表写占位 `![图N 标题]({run_dir}/charts/待定.png)`。
+3. 每个 Writer 收到：绝对分片路径、本章配额、全文主线、全局大纲、本章证据注入包、章节 Kxx、**本章图号区间**、证据台账摘要、术语表，以及**「本章关键数据点（内嵌必用）」**——编排者把注入包中该章每张卡片的「关键数据点 + 解读策略 + 使用建议 + 反证与边界」原文直接粘贴进 Writer prompt，**不是只给文件路径**。Writer 必须把至少 80% 的论点建立在粘贴的数据点上并写入正文数值；**每个引用的数据点须配一句解读（数据意味着什么、与哪个指标印证、决策含义）**，有局限的卡片顺带说明边界；缺证据写入待核问题。
 4. **单片即时校验（写作完成即执行）**：每个 Writer 落盘后，编排者立即运行
    ```text
    {skill_python} scripts/report/validate_report.py --stage part --file {run_dir}/parts/{分片}.md
    ```
    校验不过（标签句式/数字小节/禁则/清单化/非 canonical 命名）→ 打回该 Writer 修改，**不得进入组装**；8/8 通过后才运行组装。
-4. visualizer 收到：分析结果、框架、规划表图号区间、知识卡片/台账；产出 `charts/specs.json`（8 证据字段齐全），随后运行 `gen_chart.py` 生成 PNG 与语义副本。
-5. 编排者检查 8 片 UTF-8/文件名/mtime/字数/章节职责，并检查 specs 图号与规划表一致；任一未就绪不得进入组装。
+5. 编排者检查 8 片 UTF-8/文件名/mtime/字数/章节职责，并核对 `charts/chart-manifest.json` 图号与规划表预分配一致；任一未就绪不得进入组装。
 
 标准档正文净字数 30,000-35,000 字；quick 20,000-25,000；deep 40,000-50,000（组装时对 quick 用 `--target-words 20000`、deep 用 `--target-words 40000` 显式传参，防止被 standard 门槛误杀）。参考文献、免责声明和原始资料不计入正文净字数。组装脚本按 8 片固定顺序生成 `output/report.md`。
 
-## 8. 图表与视觉检查（与 8 片写作并行启动）
+## 8. 图表编码、运行与审阅（与 8 片写作同一并行组）
 
-可视化 Agent 与 Writer 在框架冻结后**同一并行组启动**，只读分析结果、框架、规划表图号区间与知识卡片。按实际数据选型，至少 5 张，standard 推荐 6-8 张，deep 推荐 8-12 张。每个 PNG spec 必须包含 `card_id/source_id/year/unit/definition/base_period/source/position`；流程/链路类使用 mermaid（不占图号，仅以代码块呈现）。
+可视化 Agent（`agents/visualizer.md`）在框架冻结后与 8 个 Writer **同一响应并行启动**，职责是**亲手编写每张图的绘图代码并运行生成 PNG**，不使用固定死模板：
 
-使用独立 Python 环境运行：
+- 依据注入包真实数据与规划表预分配图号，逐图编写 `{run_dir}/scripts/charts/fig_{NN}_{slug}.py`（中文字体注册、双轴/误差线/区间带等按需设计；**不在图内渲染主标题**——标题由正文图名行唯一承载，避免重复标题）；图型选择不限清单：先读 `references/chart-guidance.md`（基础矩阵 + **扩展图型决策库**：瀑布桥/堆叠面积/情景扇带/气泡定位/TAM-SAM-SOM/漏斗/排名棒棒糖/斜率/哑铃区间/金字塔/箱线/桑基等约 20 种，每类注明适用场景与报告章节落点），再按数据实情定图型——可自由组合或自定义，**gen_chart.py 不是生成入口**；
+- 用任务虚拟环境逐个执行：`{task_python} {run_dir}/scripts/charts/fig_{NN}_*.py`；运行失败读报错修改重跑（每图 ≤3 轮）；
+- 产出 `{run_dir}/charts/图N_标题.png`（≥5 张，standard 6-8，deep 8-12）与图表清单 `{run_dir}/charts/chart-manifest.json`（图号/标题/position/PNG 文件名/script/card_ids/source/unit）；
+- 数据必须来自注入包卡片，PNG 内不渲染主标题，来源以小字标注在图内底部；
+- 完成后运行 `render_visual_check.py` 登记 `{run_dir}/charts/inspection.json` 初始状态。
 
-```text
-{skill_python} "{skill_root}/scripts/charts/gen_chart.py" \
-  --spec "{run_dir}/charts/specs.json" \
-  --outdir "{run_dir}/charts"
-```
-
-脚本自动预检文字重叠、出界、图例遮挡、轴标签重叠和字体；编排者读取 `references/chart-inspection.md`，用视觉能力检查 PNG：**程序 WARN 图必检 + 每类图型首张必检 + 其余抽样（或拆 2 个子 agent 各看一半）**，记录 `charts/inspection.json`。Critical 问题最多重绘两轮，仍失败则移除图引用并用表格替代。
+**审阅与修复（用 Agent 编辑，不用修复脚本）**：编排者用视觉能力逐张查看 PNG 与其在正文中的位置，重点检查——图片是否位于 position 对应章节（图片漂移）、图名行是否唯一（无重复标题）、图与前后文字是否对应、有无截断/乱码/遮挡。发现问题 → 派编辑 Agent 直接修改对应分片或绘图脚本并重跑；**禁止用脚本批量改写正文/分片**。
 
 ## 9. 事实、质量、逻辑与润色
 
@@ -283,7 +249,7 @@ C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
 使用 `scripts/report/assemble_report.py`、`scripts/report/evidence_ledger.py` 和 `scripts/report/validate_report.py`（若已存在则先确认参数）执行：
 
 - 标准行业报告章节和 8 片完整。
-- H1 唯一、标题层级正确、列表使用 `-`、无纯文本伪标题。
+- H1 唯一、标题层级正确、列表使用有序 `1.`/`①`（正文禁 `-`/`*`/`•` 项目列表）、无纯文本伪标题。
 - 正文净字数达到档位下限。
 - 每个主体板块有论述、表格和 `回扣主线`（按 canonical schema）。
 - 表名在表上方并空一行；图名在图下方并空一行。
@@ -297,18 +263,26 @@ C:/Users/{user}/Desktop/{YYYY-MM-DD}_{topic_slug}_industry-analysis/
 
 本地版 `output/report.local.md` 保留绝对图片路径；运行 `scripts/report/make_feishu_copy.py` 生成 `output/report.feishu.md`，自动校验图文件并把绝对路径转换为 `@./charts/`，中文/空格/括号路径使用尖括号。
 
-**交付前置清单（缺一即禁止创建飞书文档）：**
+**一键交付（唯一交付通道，禁止散装跳步）：**
 
-1. 8 片全部通过单片校验（`validate_report.py --stage part`）。
-2. `assemble_report.py` 组装通过，且 `output/report.md` 含「可视化图表索引」。
-3. `charts/specs.json` 存在且 PNG ≥5；每张 PNG 图已被正文 `![图N …]` 实际引用（图号连续，无幽灵图号/无缺图）。
-4. `charts/inspection.json` 存在（图表视觉检查已执行）。
-5. `scripts/report/validate_report.py --stage final --run-dir {run_dir}` 退出码 0。
-6. 使用 `scripts/report/upload_report.py --file {飞书版} --manifest {run_dir}/delivery.json --run-dir {run_dir}` 上传——**该脚本在上传前会强制执行第 3-5 项校验，校验不过拒绝执行 lark-cli**。
+交付 = 运行单个脚本，串行完成全部前置清单，任一项失败立即中止并退出非 0，**不执行 lark-cli**：
 
-**禁止跳步**：未满足上述清单时，不得调用 `lark-cli`/lark-doc 创建飞书文档，也不得把 `report.md` 当作最终交付物向外宣称完成。可视化和图表检查被视为标准产物，跳过即视为流程违规；确因数据不足无法成图时，须在 `charts/inspection.json` 与交付摘要中记录缺图原因，且图表数须 ≥5 或明确说明降级为表格并获编排者确认。
+```text
+{skill_python} {skill_root}/scripts/report/deliver.py \
+  --run-dir {run_dir} --target-words {target} --title "{报告标题}" [--dry-run]
+```
 
-上传后回读验证：标题层级、表格、图片块数量、Mermaid/whiteboard 块、图名行和链接。网络失败按指数退避最多两次，最终保留本地交付并说明原因。
+`deliver.py` 执行序列（与下面的前置清单一一对应）：
+
+1. 8 片单片校验（`validate_report.py --stage part`）——不过即中止；
+2. 生成/校验 `evidence/card-index.json`（缺则用 `card_index.py` 补生成）；
+3. 图表产物校验：`charts/chart-manifest.json` 存在、PNG ≥5、PNG 文件齐全（manifest 与磁盘一一对应）；**`charts/inspection.json` 必须存在**（视觉检查未落盘 → 中止）；
+4. `assemble_report.py` 组装（带 `--spec`，注入图表索引 + 图号门禁）；
+5. `validate_report.py --stage final` 整篇校验（含图表硬门禁）；
+6. `make_feishu_copy.py` 生成飞书副本；
+7. `upload_report.py` 上传（自带重试、ticket 轮询、回读校验），写 `delivery.json`。
+
+**禁止跳步**：未运行 `deliver.py`（或它返回非 0）时，不得调用 `lark-cli`/lark-doc 创建飞书文档，也不得把 `report.md` 当作最终交付物宣称完成。跳过可视化/视觉检查即视为流程违规；确因数据不足无法成图时，须在 `charts/inspection.json` 与交付摘要记录缺图原因，并经编排者确认后（图数 <5 或降级为表格）才允许在摘要中说明。
 
 ## 12. 断点续跑与输出摘要
 

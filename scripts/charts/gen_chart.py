@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-市场调研报告通用图表生成器
-读取 specs.json（可视化 SubAgent 产出的图表规格），用 matplotlib 批量生成 PNG。
+市场调研报告图表生成器（模板参考/兜底渲染器，图表编码 Agent 可选用）
+读取图表 JSON（charts/chart-manifest.json 或旧 charts/specs.json，兼容 {"specs": [...]} 包装与裸数组），
+按条目用 matplotlib 批量生成 PNG；条目需自带 data 与 8 个证据字段。
+日常推荐：图表编码 Agent 按数据实际形态逐图手写 matplotlib 脚本（见 SKILL.md 第 8 节），本工具不强制。
 支持图型：bar / hbar / stacked_bar / line / pie / donut / radar / scatter / heatmap
 mermaid 型条目不透传绘图，直接输出代码块文本（由编排者嵌入报告）。
 
 用法：
-  gen_chart.py --spec specs.json --outdir charts [--dpi 150]
+  gen_chart.py --spec charts/specs.json --outdir charts [--dpi 150]
   gen_chart.py --self-test            # 内置演示数据生成 6 张图（验证环境）
   gen_chart.py --list-types           # 列出支持的图型
 """
@@ -579,7 +581,7 @@ def self_test(outdir):
 
 def main():
     ap = argparse.ArgumentParser(description="市场调研报告图表生成器")
-    ap.add_argument("--spec", help="specs.json 路径")
+    ap.add_argument("--spec", help="图表 JSON 路径（chart-manifest.json 或 specs.json，条目需含 data 与证据字段）")
     ap.add_argument("--outdir", default="charts", help="输出目录")
     ap.add_argument("--dpi", type=int, default=150)
     ap.add_argument("--self-test", action="store_true", help="内置演示数据自测")
