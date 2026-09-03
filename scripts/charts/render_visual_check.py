@@ -29,7 +29,17 @@ def main() -> int:
     p.add_argument("--chart", action="append", default=[], metavar="id:status",
                    help="逐图状态，如 chart-01:passed（可多次）")
     p.add_argument("--notes", default="", help="备注（degraded 时必填缺图/降级原因；缺省保留旧值）")
+    p.add_argument("--checked-by", default="", help="检查人标识（visual_status=passed 时必填，记录谁做的视觉确认）")
+    p.add_argument("--check-method", default="", help="检查方法（如 visual_model_read / manual_contact_sheet / pixel_audit，passed 时必填）")
+    p.add_argument("--enforce-evidence", action="store_true", help="强制模式：visual_status=passed 时必须提供 --checked-by 和 --check-method，否则报错退出")
     args = p.parse_args()
+
+    # 强制证据检查：passed 状态必须有检查人和检查方法
+    if args.enforce_evidence and args.visual_status == "passed":
+        if not args.checked_by:
+            p.error("--enforce-evidence 模式下，visual_status=passed 必须提供 --checked-by（谁做的检查）")
+        if not args.check_method:
+            p.error("--enforce-evidence 模式下，visual_status=passed 必须提供 --check-method（如何检查的）")
 
     payload = json.loads(args.spec.read_text(encoding="utf-8"))
     specs = payload.get("specs", payload) if isinstance(payload, dict) else payload
@@ -75,6 +85,8 @@ def main() -> int:
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "visual_status": visual_status,
         "visual_capability": capability,
+        "checked_by": args.checked_by or old_root.get("checked_by", ""),
+        "check_method": args.check_method or old_root.get("check_method", ""),
         "notes": notes,
         "charts": charts,
     }

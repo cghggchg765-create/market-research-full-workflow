@@ -16,8 +16,8 @@ from validate_report import validate as validate_final
 URL_RE = re.compile(r"https?://[^\s\"']+")
 
 
-def run(command: list[str]) -> tuple[int, str, str]:
-    proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace")
+def run(command: list[str], cwd: str | None = None) -> tuple[int, str, str]:
+    proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd)
     return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
 
 
@@ -62,16 +62,37 @@ def find_url(text: str, value) -> str:
 
 
 def import_once(file_path: Path, title: str, identity: str, folder_token: str) -> tuple[str, str]:
-    command = ["lark-cli", "drive", "+import", "--as", identity, "--file", str(file_path), "--type", "docx", "--name", title, "--format", "json"]
+    """使用 docs +create 创建飞书文档，支持 Markdown 中 @./ 本地图片自动上传。
+
+    关键：必须使用 docs +create --doc-format markdown，而非 drive +import。
+    drive +import 不处理 Markdown 本地图片引用，会导致"无法导入该图片"错误。
+    docs +create 会自动上传 @./ 引用的本地图片。
+    CWD 必须是 run_dir，确保 @./output/ 和 @./charts/ 相对路径正确解析。
+    """
+    run_dir = file_path.parent.parent  # output/.. = run_dir
+    rel_path = file_path.relative_to(run_dir)
+    command = [
+        "lark-cli", "docs", "+create",
+        "--as", identity,
+        "--title", title,
+        "--doc-format", "markdown",
+        "--content", "@./" + rel_path.as_posix(),
+        "--format", "json",
+    ]
     if folder_token:
-        command.extend(["--folder-token", folder_token])
-    code, stdout, stderr = run(command)
+        command.extend(["--parent-token", folder_token])
+    code, stdout, stderr = run(command, cwd=str(run_dir))
     if code != 0:
-        raise RuntimeError(f"lark-cli 导入失败（exit={code}）：{stderr or stdout}")
+        raise RuntimeError(f"lark-cli docs +create 失败（exit={code}）：{stderr or stdout}")
     data = parse(stdout)
-    ticket = find_ticket(data)
-    url = find_url(stdout, data)
-    return ticket, url
+    url = ""
+    if isinstance(data, dict):
+        doc = data.get("data", {}).get("document", {})
+        if isinstance(doc, dict):
+            url = doc.get("url", "")
+    if not url:
+        url = find_url(stdout, data)
+    return "", url  # docs +create 是同步的，无需 ticket 轮询
 
 
 def wait_ticket(ticket: str, polls: int, interval: float) -> str:

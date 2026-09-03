@@ -96,6 +96,26 @@ def main() -> int:
         return 1
     step(f"视觉检查门禁：{vis_msg}", True)
 
+    # 3.5) 板块覆盖检查：7个主体板块必须各有专属图表，防止某章无图只能重复引用
+    import json as _json
+    import re as _re
+    sections = ["一、", "二、", "三、", "四、", "五、", "六、", "七、"]
+    try:
+        manifest_data = _json.loads(spec_path.read_text(encoding="utf-8"))
+        manifest_list = manifest_data.get("specs", manifest_data) if isinstance(manifest_data, dict) else manifest_data
+    except Exception:
+        manifest_list = []
+    covered = set()
+    for item in manifest_list:
+        pos = item.get("position", "")
+        for sec in sections:
+            if pos.startswith(sec) or sec in pos[:4]:
+                covered.add(sec)
+    missing_sections = [s for s in sections if s not in covered]
+    if missing_sections:
+        return 1 if not step(f"板块覆盖检查：7个主体板块必须各有专属图表（缺失: {missing_sections}）", False) else 1
+    step(f"板块覆盖检查：7/7 主体板块均有专属图表", True)
+
     # 4) 组装（带清单，注入图表索引 + 图号门禁）
     if not run("assemble_report.py", "--parts-dir", str(parts), "--out",
                str(run_dir / "output" / "report.md"), "--target-words", str(args.target_words),

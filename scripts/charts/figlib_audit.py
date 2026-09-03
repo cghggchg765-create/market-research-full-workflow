@@ -84,6 +84,56 @@ def audit(fig, name: str) -> tuple[bool, list[str]]:
                 bb = leg.get_window_extent(rend)
                 if not _inside_fig(fig, bb):
                     lines.append(f"[FAIL] 图例越出画布: bbox=({bb.x0:.0f},{bb.y0:.0f},{bb.width:.0f}x{bb.height:.0f})")
+
+            # === 增强检查：多轴 x 范围一致性 ===
+            all_axes = fig.axes
+            if len(all_axes) > 1:
+                main_xlim = all_axes[0].get_xlim()
+                for other_ax in all_axes[1:]:
+                    other_xlim = other_ax.get_xlim()
+                    if abs(main_xlim[0] - other_xlim[0]) > 0.01 or abs(main_xlim[1] - other_xlim[1]) > 0.01:
+                        lines.append(f"[FAIL] 多轴 x 范围不一致: 主轴={main_xlim}, 次轴={other_xlim}（数据系列 x 坐标会错位，导致横坐标堆叠）")
+
+            # === 增强检查：类别轴数据越界 ===
+            xlim = ax.get_xlim()
+            x_range = xlim[1] - xlim[0]
+            xtick_labels = [lb.get_text() for lb in ax.get_xticklabels()
+                           if lb.get_text().strip() and lb.get_visible()]
+            n_categories = len(xtick_labels)
+            is_category_axis = 0 < n_categories <= 20
+
+            # 检查折线数据 x 坐标
+            for line in ax.get_lines():
+                xdata = line.get_xdata()
+                if len(xdata) > 0:
+                    xmin, xmax = min(xdata), max(xdata)
+                    if xmin < xlim[0] - x_range * 0.5 or xmax > xlim[1] + x_range * 0.5:
+                        lines.append(f"[FAIL] 折线数据 x 坐标超出轴范围: 数据=[{xmin:.1f},{xmax:.1f}], x轴={xlim}")
+                    if is_category_axis and x_range > 0 and (xmax - xmin) > x_range * 0.8 and xmin > xlim[0] + x_range * 0.3:
+                        lines.append(f"[WARN] 折线数据 x 范围与轴类别不匹配: 数据=[{xmin:.1f},{xmax:.1f}], x轴={xlim}（疑似 hlines 把数值画在了类别轴上）")
+
+            # === 增强检查：hlines/vlines 方向与轴匹配 ===
+            bar_x_max = 0
+            for patch in ax.patches:
+                if hasattr(patch, 'get_x') and hasattr(patch, 'get_width'):
+                    bx = patch.get_x() + patch.get_width()
+                    bar_x_max = max(bar_x_max, bx)
+
+            for coll in ax.collections:
+                coll_type = type(coll).__name__
+                if 'LineCollection' in coll_type:
+                    segs = coll.get_segments()
+                    if segs and len(segs) > 0:
+                        for seg in segs[:5]:
+                            if len(seg) >= 2:
+                                xs = [float(p[0]) for p in seg]
+                                ys = [float(p[1]) for p in seg]
+                                # 水平线：y 相同，x 变化
+                                if max(ys) - min(ys) < 0.01 and max(xs) - min(xs) > 1:
+                                    if is_category_axis and min(xs) > n_categories * 1.5:
+                                        lines.append(f"[FAIL] hlines 在类别轴上 x 坐标越界: x=[{min(xs):.0f},{max(xs):.0f}], 类别数={n_categories}（哑铃图应改用 vlines，hlines 会把数值画在类别轴上导致横坐标堆叠）")
+                                    elif bar_x_max > 0 and min(xs) > bar_x_max * 2:
+                                        lines.append(f"[FAIL] hlines 的 x 范围与柱状图不匹配: hlines x=[{min(xs):.0f},{max(xs):.0f}], 柱状图 x_max={bar_x_max:.1f}（轴错位）")
     if lines:
         print(f"[audit {name}]")
         for ln in lines:
