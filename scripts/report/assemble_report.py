@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from chart_manifest import load_items_at, resolve_spec
-from forbidden_rules import check_forbidden, labelled_list_ratio
+from forbidden_rules import check_forbidden, labelled_list_ratio, check_figure_table_support
 
 PARTS = (
     "01-executive-summary.md",
